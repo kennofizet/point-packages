@@ -1,0 +1,31 @@
+{
+    "name": "company/workpoint-backend",
+    "description": "Workpoint Record backend for Laravel — record workpoint events with check rules, zone/server scoped via packages-core",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "KennoFizet",
+            "email": "kennofizetreal@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^12.0",
+        "kennofizet/packages-core-backend": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Company\\Workpoint\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Company\\Workpoint\\WorkpointServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

@@ -1,0 +1,18 @@
+{
+    "description": "Point packages — Workpoint Record (backend + frontend)",
+    "type": "project",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/backend",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "require": {
+        "company/workpoint-backend": "*"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
