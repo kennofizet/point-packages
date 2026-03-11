@@ -1,10 +1,10 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Rules;
+namespace Kennofizet\Workpoint\Rules;
 
-use Company\Workpoint\Contracts\CheckRuleInterface;
-use Company\Workpoint\Models\WorkpointRecord;
-use Company\Workpoint\Support\PeriodHelper;
+use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Support\PeriodHelper;
 
 class FirstTimePerPeriod implements CheckRuleInterface
 {

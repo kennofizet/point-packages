@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Support;
+namespace Kennofizet\Workpoint\Support;
 
 use Carbon\Carbon;
 

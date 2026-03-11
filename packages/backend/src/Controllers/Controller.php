@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Controllers;
+namespace Kennofizet\Workpoint\Controllers;
 
 use Kennofizet\PackagesCore\Traits\GlobalDataTrait;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;

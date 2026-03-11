@@ -1,11 +1,10 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Services;
+namespace Kennofizet\Workpoint\Services;
 
-use Company\Workpoint\Models\WorkpointRecord;
-use Company\Workpoint\Models\WorkpointPeriodTotal;
-use Company\Workpoint\Support\PeriodHelper;
-use Illuminate\Support\Facades\DB;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Models\WorkpointPeriodTotal;
+use Kennofizet\Workpoint\Support\PeriodHelper;
 
 /**
  * Syncs workpoint_period_totals when a record is created so "top by period" can read from the summary table.

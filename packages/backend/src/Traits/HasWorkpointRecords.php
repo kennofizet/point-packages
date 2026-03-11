@@ -1,10 +1,10 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Traits;
+namespace Kennofizet\Workpoint\Traits;
 
-use Company\Workpoint\Models\WorkpointRecord;
-use Company\Workpoint\Support\PeriodHelper;
-use Company\Workpoint\WorkpointRecordService;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Support\PeriodHelper;
+use Kennofizet\Workpoint\WorkpointRecordService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -14,7 +14,7 @@ trait HasWorkpointRecords
      * Record a workpoint for this subject.
      *
      * @param  object|null  $target  Optional target (e.g. Task, Project).
-     * @return \Company\Workpoint\Models\WorkpointRecord|null  The created record or null if not allowed.
+     * @return \Kennofizet\Workpoint\Models\WorkpointRecord|null  The created record or null if not allowed.
      */
     public function recordWorkpoint(string $actionKey, object|null $target = null, array $payload = []): ?WorkpointRecord
     {

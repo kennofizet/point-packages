@@ -1,9 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Controllers;
+namespace Kennofizet\Workpoint\Controllers;
 
-use Company\Workpoint\Support\PeriodHelper;
-use Company\Workpoint\WorkpointRecordService;
+use Kennofizet\Workpoint\Support\PeriodHelper;
+use Kennofizet\Workpoint\WorkpointRecordService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

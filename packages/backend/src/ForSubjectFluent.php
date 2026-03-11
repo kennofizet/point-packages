@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint;
+namespace Kennofizet\Workpoint;
 
-use Company\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
 
 class ForSubjectFluent
 {

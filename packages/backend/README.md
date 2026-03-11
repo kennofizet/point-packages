@@ -19,7 +19,7 @@ Laravel package to record workpoints (points) for subjects (e.g. users) with con
 Add the package to your Laravel app:
 
 ```bash
-composer require company/workpoint-backend
+composer require kennofizet/workpoint-backend
 ```
 
 If you use a local or private repo, add the repository in your root `composer.json` and run the same command.
@@ -79,7 +79,7 @@ This creates:
 After pulling a new version of the package:
 
 ```bash
-composer update company/workpoint-backend
+composer update kennofizet/workpoint-backend
 ```
 
 If the package adds new config keys or migrations:
@@ -106,7 +106,7 @@ If the package adds new config keys or migrations:
 - **api_prefix** — URL segment for workpoint API (e.g. `workpoint` → `KNF_CORE_API_PREFIX/workpoint/top`).
 - **use_period_totals_table** — `true` to use the summary table for “top by period” (recommended for large data).
 - **event_class** — Event class fired when a workpoint is recorded (for your listeners).
-- **after_record_listeners** — Array of class names that run after each record (e.g. update coins, send notification). Each must implement `Company\Workpoint\Contracts\AfterWorkpointRecordedListener` and have `handle(WorkpointRecord $record): void`.
+- **after_record_listeners** — Array of class names that run after each record (e.g. update coins, send notification). Each must implement `Kennofizet\Workpoint\Contracts\AfterWorkpointRecordedListener` and have `handle(WorkpointRecord $record): void`.
 - **rules** — Map of rule names to classes (none, first_time, first_time_per_target, first_time_per_period, count_cap_per_period).
 
 ### `config/workpoint_cases.php`
@@ -138,7 +138,7 @@ Add **HasWorkpointRecords** to any model that can earn workpoints (e.g. `User`).
 ### 1. Use the trait
 
 ```php
-use Company\Workpoint\Traits\HasWorkpointRecords;
+use Kennofizet\Workpoint\Traits\HasWorkpointRecords;
 
 class User extends Authenticatable
 {
@@ -206,7 +206,7 @@ The package will then maintain `workpoint_period_totals` on each record and `get
 
 | Step            | Command / action |
 |-----------------|------------------|
-| Install         | `composer require company/workpoint-backend` |
+| Install         | `composer require kennofizet/workpoint-backend` |
 | Publish config | `php artisan vendor:publish --tag=workpoint-config` |
 | .env            | Set `WORKPOINT_*` vars if you need non-defaults |
 | Migrations      | `php artisan vendor:publish --tag=workpoint-migrations` then `php artisan migrate` |

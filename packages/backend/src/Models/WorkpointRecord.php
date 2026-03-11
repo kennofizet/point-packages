@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Models;
+namespace Kennofizet\Workpoint\Models;
 
-use Company\Workpoint\Support\PeriodHelper;
+use Kennofizet\Workpoint\Support\PeriodHelper;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;

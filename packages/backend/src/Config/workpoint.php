@@ -20,13 +20,13 @@ return [
     |--------------------------------------------------------------------------
     | The main app (or Coin package) can listen to this event.
     */
-    'event_class' => \Company\Workpoint\Events\WorkpointRecorded::class,
+    'event_class' => \Kennofizet\Workpoint\Events\WorkpointRecorded::class,
 
     /*
     |--------------------------------------------------------------------------
     | Listeners called after a workpoint is recorded (after the event is dispatched)
     |--------------------------------------------------------------------------
-    | Each class must implement Company\Workpoint\Contracts\AfterWorkpointRecordedListener
+    | Each class must implement Kennofizet\Workpoint\Contracts\AfterWorkpointRecordedListener
     | and have a handle(WorkpointRecord $record): void method.
     | Example: ['App\Listeners\UpdateCoinOnWorkpoint', 'App\Listeners\NotifyUserWorkpointEarned']
     */
@@ -35,10 +35,10 @@ return [
     ],
 
     'rules' => [
-        'none' => \Company\Workpoint\Rules\NoCheck::class,
-        'first_time' => \Company\Workpoint\Rules\FirstTime::class,
-        'first_time_per_target' => \Company\Workpoint\Rules\FirstTimePerTarget::class,
-        'first_time_per_period' => \Company\Workpoint\Rules\FirstTimePerPeriod::class,
-        'count_cap_per_period' => \Company\Workpoint\Rules\CountCapPerPeriod::class,
+        'none' => \Kennofizet\Workpoint\Rules\NoCheck::class,
+        'first_time' => \Kennofizet\Workpoint\Rules\FirstTime::class,
+        'first_time_per_target' => \Kennofizet\Workpoint\Rules\FirstTimePerTarget::class,
+        'first_time_per_period' => \Kennofizet\Workpoint\Rules\FirstTimePerPeriod::class,
+        'count_cap_per_period' => \Kennofizet\Workpoint\Rules\CountCapPerPeriod::class,
     ],
 ];

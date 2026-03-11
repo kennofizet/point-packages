@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Contracts;
+namespace Kennofizet\Workpoint\Contracts;
 
-use Company\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
 
 interface AfterWorkpointRecordedListener
 {

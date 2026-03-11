@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Models;
+namespace Kennofizet\Workpoint\Models;
 
 use Illuminate\Database\Eloquent\Model;
 

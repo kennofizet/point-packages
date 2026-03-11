@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint\Events;
+namespace Kennofizet\Workpoint\Events;
 
-use Company\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 

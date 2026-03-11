@@ -1,14 +1,14 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint;
+namespace Kennofizet\Workpoint;
 
-use Company\Workpoint\Contracts\AfterWorkpointRecordedListener;
-use Company\Workpoint\Contracts\CheckRuleInterface;
-use Company\Workpoint\Events\WorkpointRecorded;
-use Company\Workpoint\Models\WorkpointPeriodTotal;
-use Company\Workpoint\Models\WorkpointRecord;
-use Company\Workpoint\Services\PeriodTotalsSync;
-use Company\Workpoint\Support\PeriodHelper;
+use Kennofizet\Workpoint\Contracts\AfterWorkpointRecordedListener;
+use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
+use Kennofizet\Workpoint\Events\WorkpointRecorded;
+use Kennofizet\Workpoint\Models\WorkpointPeriodTotal;
+use Kennofizet\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Services\PeriodTotalsSync;
+use Kennofizet\Workpoint\Support\PeriodHelper;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;

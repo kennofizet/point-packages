@@ -1,5 +1,5 @@
 /**
- * @company/workpoint-frontend
+ * @kennofizet/workpoint-frontend
  *
  * Workpoint UI: top users ranking (day/week/month/year) and point-earned notification.
  * Consumes workpoint-backend API (top endpoint). Host app provides API base URL and auth.

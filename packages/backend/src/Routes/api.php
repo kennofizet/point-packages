@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
-use Company\Workpoint\Controllers\WorkpointController;
+use Kennofizet\Workpoint\Controllers\WorkpointController;
 
 $prefix = config('packages-core.api_prefix', 'api/knf');
 $workpointPrefix = config('workpoint.api_prefix', 'workpoint');

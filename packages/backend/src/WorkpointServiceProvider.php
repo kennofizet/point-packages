@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Company\Workpoint;
+namespace Kennofizet\Workpoint;
 
-use Company\Workpoint\WorkpointRecordService;
+use Kennofizet\Workpoint\WorkpointRecordService;
 use Illuminate\Support\ServiceProvider;
 
 class WorkpointServiceProvider extends ServiceProvider

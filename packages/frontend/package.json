@@ -1,5 +1,5 @@
 {
-  "name": "@company/workpoint-frontend",
+  "name": "@kennofizet/workpoint-frontend",
   "version": "1.0.0",
   "description": "Workpoint frontend package — top users ranking and point-earned UI components",
   "main": "./src/index.js",
