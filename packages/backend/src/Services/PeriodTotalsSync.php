@@ -23,39 +23,26 @@ class PeriodTotalsSync
             return;
         }
 
-        $table = WorkpointPeriodTotal::getTableName();
-        $now = now()->toDateTimeString();
-
         foreach (PeriodHelper::PERIODS_ALL as $periodType) {
             $periodKey = PeriodHelper::periodKey($periodType);
-            $driver = DB::getDriverName();
-            if ($driver === 'mysql') {
-                DB::statement(
-                    "INSERT INTO {$table} (zone_id, subject_type, subject_id, period_type, period_key, total_points, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                     ON DUPLICATE KEY UPDATE total_points = total_points + ?, updated_at = ?",
-                    [$zoneId, $subjectType, $subjectId, $periodType, $periodKey, $delta, $now, $now, $delta, $now]
-                );
+            $row = WorkpointPeriodTotal::query()
+                ->where('zone_id', $zoneId)
+                ->where('subject_type', $subjectType)
+                ->where('subject_id', $subjectId)
+                ->where('period_type', $periodType)
+                ->where('period_key', $periodKey)
+                ->first();
+            if ($row) {
+                $row->increment('total_points', $delta);
             } else {
-                $row = WorkpointPeriodTotal::query()
-                    ->where('zone_id', $zoneId)
-                    ->where('subject_type', $subjectType)
-                    ->where('subject_id', $subjectId)
-                    ->where('period_type', $periodType)
-                    ->where('period_key', $periodKey)
-                    ->first();
-                if ($row) {
-                    $row->increment('total_points', $delta);
-                } else {
-                    WorkpointPeriodTotal::create([
-                        'zone_id' => $zoneId,
-                        'subject_type' => $subjectType,
-                        'subject_id' => $subjectId,
-                        'period_type' => $periodType,
-                        'period_key' => $periodKey,
-                        'total_points' => $delta,
-                    ]);
-                }
+                WorkpointPeriodTotal::create([
+                    'zone_id' => $zoneId,
+                    'subject_type' => $subjectType,
+                    'subject_id' => $subjectId,
+                    'period_type' => $periodType,
+                    'period_key' => $periodKey,
+                    'total_points' => $delta,
+                ]);
             }
         }
     }

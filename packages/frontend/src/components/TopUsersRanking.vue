@@ -47,7 +47,7 @@ export default {
   props: {
     /** API base URL (e.g. from host app) */
     apiBaseUrl: { type: String, default: '' },
-    /** X-RewardPlay-Token for auth (or from apiConfig) */
+    /** X-Knf-Token for auth (or from apiConfig) */
     token: { type: String, default: '' },
     /** Request limit */
     limit: { type: Number, default: 10 },
@@ -77,7 +77,7 @@ export default {
         const headers = { Accept: 'application/json' }
         const token = effectiveToken()
         if (token) {
-          headers['X-RewardPlay-Token'] = token
+          headers['X-Knf-Token'] = token
         }
         const res = await fetch(url, { credentials: 'include', headers })
         const data = await res.json()

@@ -1,32 +1,215 @@
 # Workpoint Backend
 
-Laravel package: record workpoint events with check rules; zone/server scoped via **packages-core**. Same format as feedback-packages/rewardplay-packages (backend under `packages/backend`).
+Laravel package to record workpoints (points) for subjects (e.g. users) with configurable rules, zone-scoped via **packages-core**. Use the **HasWorkpointRecords** trait on any model to record points and query history.
 
-## Structure
+---
 
-- `packages/backend` — Laravel package (Company\Workpoint), requires **kennofizet/packages-core-backend**.
-- `packages/frontend` — Vue 3 components (top users ranking, point-earned notification); consumed by host app (no npm build inside this repo).
+## Requirements
 
-## Backend
+- PHP 8.2+
+- Laravel 12.x
+- **kennofizet/packages-core-backend** (for zone scoping and API auth)
 
-- **Config**: `workpoint.php` (table, event_class, **after_record_listeners**, rules, api_prefix), `workpoint_cases.php` (action_key => points, check, period, cap). Set `after_record_listeners` to an array of class names implementing `AfterWorkpointRecordedListener` (each has `handle(WorkpointRecord $record): void`); they run after the event is dispatched (e.g. update coin, notify user).
-- **Zone scoping**: Queries use `BaseModelActions::currentUserZoneId()`; `workpoint_records` has `zone_id`; routes use `ValidateRewardPlayToken` (packages-core).
-- **API**: `GET {api_prefix}/workpoint/top?period=day|week|month|year&limit=10` — top users by total points in period (scoped by current zone).
-- **Trait HasWorkpointRecords**: `recordWorkpoint()`, `workpointRecords()`, **`getWorkpointRecordsByPeriod(string $period)`** — returns this subject’s records in the given period (day|week|month|year), ordered by `created_at` desc.
+---
 
-## Scaling "top by period" (large data)
+## Install
 
-By default, top is computed with `SUM(points_delta)` and `groupBy` on `workpoint_records`, which can be slow on large tables. For scale:
+### 1. Composer
 
-1. Set **`workpoint.use_period_totals_table`** to `true` (or `WORKPOINT_USE_PERIOD_TOTALS_TABLE=true`).
-2. Run the migration that creates **`workpoint_period_totals`** (one row per subject per period type per period key; synced on each record).
-3. `getTopInPeriod()` then reads from this table (indexed by zone, period_type, period_key, total_points) instead of aggregating the main table.
+Add the package to your Laravel app:
 
-If you enable the option after you already have data, backfill `workpoint_period_totals` once (e.g. loop over `WorkpointRecord` and call `app(PeriodTotalsSync::class)->syncRecord($record)` for each, or add an artisan command).
+```bash
+composer require company/workpoint-backend
+```
 
-## Frontend (package only)
+If you use a local or private repo, add the repository in your root `composer.json` and run the same command.
 
-- **WorkpointTopUsersRanking**: Tabs Day/Week/Month/Year, fetches top from API. Pass `apiBaseUrl` (or set `window.__WORKPOINT_API_BASE__`). Slot `#subject` to customize row (e.g. user name).
-- **WorkpointPointEarnedNotification**: Shows when user earns points; props `points`, `message`, `show`, `autoHideMs`. Use after recording a workpoint or when listening to `WorkpointRecorded` event.
+### 2. Publish config
 
-Host app: install backend via Composer, frontend via npm (or copy); configure API base and auth; run migrations. No `npm run dev` inside this package — you test from the host app.
+Publish the config files so you can edit them in your app:
+
+```bash
+php artisan vendor:publish --tag=workpoint-config
+```
+
+This creates (or overwrites):
+
+- `config/workpoint.php`
+- `config/workpoint_cases.php`
+
+### 3. Configure .env
+
+Add to your `.env` (optional; defaults are shown):
+
+```env
+# Tables (default names)
+WORKPOINT_TABLE=workpoint_records
+WORKPOINT_PERIOD_TOTALS_TABLE=workpoint_period_totals
+
+# API path: your API prefix + this segment (e.g. api/knf/workpoint)
+WORKPOINT_API_PREFIX=workpoint
+
+# Set to true for large data: "top by period" reads from workpoint_period_totals instead of aggregating records
+WORKPOINT_USE_PERIOD_TOTALS_TABLE=true
+```
+
+### 4. Publish and run migrations
+
+Publish migrations into your app:
+
+```bash
+php artisan vendor:publish --tag=workpoint-migrations
+```
+
+Then run them:
+
+```bash
+php artisan migrate
+```
+
+This creates:
+
+- `workpoint_records` — one row per workpoint event (subject, action, points, etc.)
+- `workpoint_period_totals` — optional summary table used when `WORKPOINT_USE_PERIOD_TOTALS_TABLE=true`
+
+---
+
+## Update
+
+After pulling a new version of the package:
+
+```bash
+composer update company/workpoint-backend
+```
+
+If the package adds new config keys or migrations:
+
+1. **Config** — Optionally re-publish and merge changes:
+   ```bash
+   php artisan vendor:publish --tag=workpoint-config --force
+   ```
+   Review `config/workpoint.php` and `config/workpoint_cases.php` so you don’t lose your custom values.
+
+2. **Migrations** — Re-publish migrations if new ones were added, then run:
+   ```bash
+   php artisan vendor:publish --tag=workpoint-migrations --force
+   php artisan migrate
+   ```
+
+---
+
+## Config overview
+
+### `config/workpoint.php`
+
+- **table** / **period_totals_table** — Table names (from .env).
+- **api_prefix** — URL segment for workpoint API (e.g. `workpoint` → `KNF_CORE_API_PREFIX/workpoint/top`).
+- **use_period_totals_table** — `true` to use the summary table for “top by period” (recommended for large data).
+- **event_class** — Event class fired when a workpoint is recorded (for your listeners).
+- **after_record_listeners** — Array of class names that run after each record (e.g. update coins, send notification). Each must implement `Company\Workpoint\Contracts\AfterWorkpointRecordedListener` and have `handle(WorkpointRecord $record): void`.
+- **rules** — Map of rule names to classes (none, first_time, first_time_per_target, first_time_per_period, count_cap_per_period).
+
+### `config/workpoint_cases.php`
+
+Defines **action keys** and how many points they give, plus which rule to use. Example:
+
+```php
+return [
+    'task_completed_on_time' => [
+        'points' => 2,
+        'check' => 'first_time_per_target',
+    ],
+    'app_first_visit_day' => [
+        'points' => 1,
+        'check' => 'first_time_per_period',
+        'period' => 'day',
+    ],
+];
+```
+
+You can add or change keys here; the package uses them when you call `recordWorkpoint('task_completed_on_time', $task)`.
+
+---
+
+## Using the trait
+
+Add **HasWorkpointRecords** to any model that can earn workpoints (e.g. `User`).
+
+### 1. Use the trait
+
+```php
+use Company\Workpoint\Traits\HasWorkpointRecords;
+
+class User extends Authenticatable
+{
+    use HasWorkpointRecords;
+
+    // ...
+}
+```
+
+### 2. Record workpoints
+
+When something happens (e.g. user completes a task), record a workpoint by **action key** (defined in `workpoint_cases.php`):
+
+```php
+// No target
+$user->recordWorkpoint('app_first_visit_day');
+
+// With target (e.g. task) — used by rules like first_time_per_target
+$user->recordWorkpoint('task_completed_on_time', $task);
+
+// Optional payload
+$user->recordWorkpoint('task_accepted_sla', $task, ['sla_hours' => 24]);
+```
+
+Returns the created `WorkpointRecord` or `null` if the rule did not allow it (e.g. already earned for that target/period).
+
+### 3. Query records
+
+```php
+// All workpoint records for this user
+$user->workpointRecords;
+
+// Records in a period (day|week|month|year), newest first
+$user->getWorkpointRecordsByPeriod('week');
+$user->getWorkpointRecordsByPeriod('month');
+```
+
+---
+
+## API
+
+With **packages-core** and the default prefix, the endpoint is:
+
+- **GET** `KNF_CORE_API_PREFIX/WORKPOINT_API_PREFIX/top?period=day|week|month|year&limit=10`
+
+Returns top subjects (e.g. users) by total points in the given period, scoped by the current zone. Use it to drive leaderboards (Day / Week / Month / Year).
+
+---
+
+## Optional: scale “top by period”
+
+If you have a lot of records, aggregating `workpoint_records` for “top by period” can be slow. You can switch to the summary table:
+
+1. Set in `.env`:
+   ```env
+   WORKPOINT_USE_PERIOD_TOTALS_TABLE=true
+   ```
+2. Ensure the migration for `workpoint_period_totals` has been run (it is published with `workpoint-migrations`).
+
+The package will then maintain `workpoint_period_totals` on each record and `getTopInPeriod()` will read from that table. If you enable this after you already have data, run a one-time backfill (e.g. loop over existing `WorkpointRecord` and call `app(PeriodTotalsSync::class)->syncRecord($record)` for each).
+
+---
+
+## Summary
+
+| Step            | Command / action |
+|-----------------|------------------|
+| Install         | `composer require company/workpoint-backend` |
+| Publish config | `php artisan vendor:publish --tag=workpoint-config` |
+| .env            | Set `WORKPOINT_*` vars if you need non-defaults |
+| Migrations      | `php artisan vendor:publish --tag=workpoint-migrations` then `php artisan migrate` |
+| Use in model    | `use HasWorkpointRecords;` then `$model->recordWorkpoint('action_key', $target)` |
+
+For more (events, listeners, rules), see the in-file comments in `config/workpoint.php` and `config/workpoint_cases.php`.

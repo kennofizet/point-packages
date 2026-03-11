@@ -20,8 +20,8 @@ return new class extends Migration {
             $table->timestamps();
 
             $table->unique(['zone_id', 'subject_type', 'subject_id', 'period_type', 'period_key'], 'workpoint_period_totals_unique');
-            $table->index(['zone_id', 'period_type', 'period_key']);
-            $table->index(['period_type', 'period_key', 'total_points']);
+            $table->index(['zone_id', 'period_type', 'period_key'], 'wp_pt_zone_period_idx');
+            $table->index(['period_type', 'period_key', 'total_points'], 'wp_pt_type_key_pts_idx');
         });
     }
 

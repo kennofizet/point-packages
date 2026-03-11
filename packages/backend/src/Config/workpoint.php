@@ -12,7 +12,7 @@ return [
     | When true, getTopInPeriod reads from workpoint_period_totals (synced on each record).
     | When false, top is computed with SUM/groupBy on workpoint_records (fine for small data).
     */
-    'use_period_totals_table' => env('WORKPOINT_USE_PERIOD_TOTALS_TABLE', false),
+    'use_period_totals_table' => env('WORKPOINT_USE_PERIOD_TOTALS_TABLE', true),
 
     /*
     |--------------------------------------------------------------------------
