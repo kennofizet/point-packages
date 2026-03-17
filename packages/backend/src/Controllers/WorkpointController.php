@@ -12,9 +12,28 @@ class WorkpointController extends Controller
     private const TOP_LIMIT_MIN = 1;
     private const TOP_LIMIT_MAX = 100;
 
+    private const LANG_CODES = ['vi', 'en'];
+
     public function __construct(
         private readonly WorkpointRecordService $workpointService
     ) {
+    }
+
+    private function isManager(Request $request): bool
+    {
+        $managedServerId = $request->attributes->get('knf_core_user_managed_server_id');
+        $managedZoneIds = $request->attributes->get('knf_core_user_managed_zone_ids', []);
+        return !empty($managedServerId)
+            || (!empty($managedZoneIds) && is_array($managedZoneIds) && count($managedZoneIds) > 0);
+    }
+
+    private function canManageZoneFromRequest(Request $request, int $zoneId): bool
+    {
+        if ($request->attributes->get('knf_core_user_managed_server_id') !== null) {
+            return true;
+        }
+        $managedZoneIds = $request->attributes->get('knf_core_user_managed_zone_ids', []);
+        return in_array($zoneId, $managedZoneIds, true);
     }
 
     /**
@@ -35,5 +54,79 @@ class WorkpointController extends Controller
             'period' => $period,
             'items' => $items->values()->all(),
         ]);
+    }
+
+    /**
+     * List workpoint cases (rules) for the rule page. Pass language (vi|en) for description locale.
+     * Zone comes from X-Knf-Zone-Id (current zone). Returns merged rules (default + zone overrides) and isManager.
+     */
+    public function rules(Request $request): JsonResponse
+    {
+        $lang = $request->input('language', 'vi');
+        if (!in_array($lang, self::LANG_CODES, true)) {
+            $lang = 'vi';
+        }
+        $zoneId = $request->attributes->get('knf_core_user_zone_id_current');
+
+        $list = $this->workpointService->getMergedRulesForZone($zoneId, $lang);
+
+        return $this->apiResponseWithContext([
+            'language' => $lang,
+            'rules' => $list,
+            'isManager' => $this->isManager($request),
+        ]);
+    }
+
+    /**
+     * Save or update one zone case override (manager only). Body: zone_id, case_key, points, check, period?, cap?, descriptions?.
+     */
+    public function saveRule(Request $request): JsonResponse
+    {
+        $zoneId = $request->input('zone_id');
+        if ($zoneId === null || $zoneId === '') {
+            return $this->apiErrorResponse('zone_id is required', 422);
+        }
+        $zoneId = (int) $zoneId;
+        if (!$this->canManageZoneFromRequest($request, $zoneId)) {
+            return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
+        }
+
+        $caseKey = $request->input('case_key');
+        if (!is_string($caseKey) || $caseKey === '') {
+            return $this->apiErrorResponse('case_key is required', 422);
+        }
+
+        try {
+            $this->workpointService->saveZoneCase($zoneId, $caseKey, [
+                'points' => $request->input('points', 0),
+                'check' => $request->input('check', 'none'),
+                'period' => $request->input('period'),
+                'cap' => $request->input('cap'),
+                'descriptions' => $request->input('descriptions'),
+            ]);
+        } catch (\InvalidArgumentException) {
+            return $this->apiErrorResponse('Invalid case_key', 422);
+        }
+
+        return $this->apiResponseWithContext(['saved' => true]);
+    }
+
+    /**
+     * Reset zone rules to default: remove all custom config for the zone and clone from config (manager only).
+     */
+    public function resetZoneRules(Request $request): JsonResponse
+    {
+        $zoneId = $request->input('zone_id');
+        if ($zoneId === null || $zoneId === '') {
+            return $this->apiErrorResponse('zone_id is required', 422);
+        }
+        $zoneId = (int) $zoneId;
+        if (!$this->canManageZoneFromRequest($request, $zoneId)) {
+            return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
+        }
+
+        $this->workpointService->resetZoneRulesToDefault($zoneId);
+
+        return $this->apiResponseWithContext(['reset' => true]);
     }
 }

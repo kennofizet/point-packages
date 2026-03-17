@@ -3,6 +3,7 @@
 return [
     'table' => env('WORKPOINT_TABLE', 'workpoint_records'),
     'period_totals_table' => env('WORKPOINT_PERIOD_TOTALS_TABLE', 'workpoint_period_totals'),
+    'zone_cases_table' => env('WORKPOINT_ZONE_CASES_TABLE', 'workpoint_zone_cases'),
     'api_prefix' => env('WORKPOINT_API_PREFIX', 'workpoint'),
 
     /*
@@ -13,6 +14,15 @@ return [
     | When false, top is computed with SUM/groupBy on workpoint_records (fine for small data).
     */
     'use_period_totals_table' => env('WORKPOINT_USE_PERIOD_TOTALS_TABLE', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Subject name column for "top by period" response
+    |--------------------------------------------------------------------------
+    | When set (e.g. 'name', 'username'), getTopInPeriod will resolve the subject
+    | by relation and add subject_name to each item. Leave null to omit names.
+    */
+    'subject_name_col' => env('WORKPOINT_SUBJECT_NAME_COL', null),
 
     /*
     |--------------------------------------------------------------------------

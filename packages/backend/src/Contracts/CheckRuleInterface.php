@@ -12,6 +12,7 @@ interface CheckRuleInterface
      * @param  string  $actionKey  Action key from workpoint_cases.
      * @param  array  $payload  Extra data passed when recording.
      * @param  array  $caseConfig  Config for this action (points, check, period, cap, etc.).
+     * @param  int|null  $zoneId  Current user zone ID (from request) for zone-scoped checks.
      * @return bool  True if the record is allowed, false otherwise.
      */
     public function allowed(
@@ -19,6 +20,7 @@ interface CheckRuleInterface
         ?object $target,
         string $actionKey,
         array $payload,
-        array $caseConfig
+        array $caseConfig,
+        ?int $zoneId = null
     ): bool;
 }

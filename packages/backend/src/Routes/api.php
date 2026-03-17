@@ -15,4 +15,7 @@ Route::prefix($prefix . '/' . $workpointPrefix)
     ])
     ->group(function () {
         Route::get('top', [WorkpointController::class, 'top']);
+        Route::get('rules', [WorkpointController::class, 'rules']);
+        Route::post('rules/save', [WorkpointController::class, 'saveRule']);
+        Route::post('rules/reset', [WorkpointController::class, 'resetZoneRules']);
     });

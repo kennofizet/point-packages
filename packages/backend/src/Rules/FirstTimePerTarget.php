@@ -12,18 +12,24 @@ class FirstTimePerTarget implements CheckRuleInterface
         ?object $target,
         string $actionKey,
         array $payload,
-        array $caseConfig
+        array $caseConfig,
+        ?int $zoneId = null
     ): bool {
         if ($target === null) {
             return false;
         }
 
-        return !WorkpointRecord::query()
+        $query = WorkpointRecord::query()
             ->where('subject_type', $subject::class)
             ->where('subject_id', $subject->getKey())
             ->where('action_key', $actionKey)
             ->where('target_type', $target::class)
-            ->where('target_id', $target->getKey())
-            ->exists();
+            ->where('target_id', $target->getKey());
+
+        if ($zoneId !== null) {
+            $query->where('zone_id', $zoneId);
+        }
+
+        return !$query->exists();
     }
 }

@@ -11,7 +11,8 @@ class NoCheck implements CheckRuleInterface
         ?object $target,
         string $actionKey,
         array $payload,
-        array $caseConfig
+        array $caseConfig,
+        ?int $zoneId = null
     ): bool {
         return true;
     }
