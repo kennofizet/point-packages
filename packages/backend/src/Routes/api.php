@@ -7,15 +7,16 @@ $prefix = config('packages-core.api_prefix', 'api/knf');
 $workpointPrefix = config('workpoint.api_prefix', 'workpoint');
 $rateLimit = config('packages-core.rate_limit', 60);
 
+$baseMiddleware = ['api', "throttle:{$rateLimit},1", 'knf.core.token'];
+
 Route::prefix($prefix . '/' . $workpointPrefix)
-    ->middleware([
-        'api',
-        "throttle:{$rateLimit},1",
-        'knf.core.token',
-    ])
+    ->middleware($baseMiddleware)
     ->group(function () {
         Route::get('top', [WorkpointController::class, 'top']);
         Route::get('rules', [WorkpointController::class, 'rules']);
-        Route::post('rules/save', [WorkpointController::class, 'saveRule']);
-        Route::post('rules/reset', [WorkpointController::class, 'resetZoneRules']);
+
+        Route::middleware(['knf.core.manager'])->group(function () {
+            Route::post('rules/save', [WorkpointController::class, 'saveRule']);
+            Route::post('rules/reset', [WorkpointController::class, 'resetZoneRules']);
+        });
     });

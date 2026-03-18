@@ -19,23 +19,6 @@ class WorkpointController extends Controller
     ) {
     }
 
-    private function isManager(Request $request): bool
-    {
-        $managedServerId = $request->attributes->get('knf_core_user_managed_server_id');
-        $managedZoneIds = $request->attributes->get('knf_core_user_managed_zone_ids', []);
-        return !empty($managedServerId)
-            || (!empty($managedZoneIds) && is_array($managedZoneIds) && count($managedZoneIds) > 0);
-    }
-
-    private function canManageZoneFromRequest(Request $request, int $zoneId): bool
-    {
-        if ($request->attributes->get('knf_core_user_managed_server_id') !== null) {
-            return true;
-        }
-        $managedZoneIds = $request->attributes->get('knf_core_user_managed_zone_ids', []);
-        return in_array($zoneId, $managedZoneIds, true);
-    }
-
     /**
      * Top users by total workpoints in the given period (day|week|month|year). Scoped by zone (packages-core).
      */
@@ -73,7 +56,7 @@ class WorkpointController extends Controller
         return $this->apiResponseWithContext([
             'language' => $lang,
             'rules' => $list,
-            'isManager' => $this->isManager($request),
+            'isManager' => self::isManager(),
         ]);
     }
 
@@ -87,7 +70,7 @@ class WorkpointController extends Controller
             return $this->apiErrorResponse('zone_id is required', 422);
         }
         $zoneId = (int) $zoneId;
-        if (!$this->canManageZoneFromRequest($request, $zoneId)) {
+        if (!self::canManageZoneOrServer($zoneId)) {
             return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
         }
 
@@ -121,7 +104,7 @@ class WorkpointController extends Controller
             return $this->apiErrorResponse('zone_id is required', 422);
         }
         $zoneId = (int) $zoneId;
-        if (!$this->canManageZoneFromRequest($request, $zoneId)) {
+        if (!self::canManageZoneOrServer($zoneId)) {
             return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
         }
 
