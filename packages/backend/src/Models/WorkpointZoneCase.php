@@ -16,6 +16,12 @@ class WorkpointZoneCase extends Model
         'descriptions',
     ];
 
+    protected $hidden = [
+        'case_key',
+        'check',
+        'period'
+    ];
+
     protected $casts = [
         'points' => 'integer',
         'cap' => 'integer',

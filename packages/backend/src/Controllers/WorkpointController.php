@@ -112,4 +112,135 @@ class WorkpointController extends Controller
 
         return $this->apiResponseWithContext(['reset' => true]);
     }
+
+    private function parseLanguage(Request $request): string
+    {
+        $lang = $request->input('language', 'vi');
+        if (!in_array($lang, self::LANG_CODES, true)) {
+            $lang = 'vi';
+        }
+        return $lang;
+    }
+
+    private function authorizeHistoryAccess(): ?JsonResponse
+    {
+        $zoneId = self::currentUserZoneId();
+
+        if ($zoneId === null || !self::canManageZoneOrServer($zoneId)) {
+            return $this->apiErrorResponse('Forbidden', 403);
+        }
+
+        return null;
+    }
+
+    /**
+     * Current user's summary for history screen (totals, ranks, today_by_rule).
+     */
+    public function historyMeSummary(Request $request): JsonResponse
+    {
+        $lang = $this->parseLanguage($request);
+
+        $userId = self::currentUserId();
+        $subjectClass = $this->workpointService->getSubjectClass();
+
+        $data = $this->workpointService->buildUserHistorySummary(
+            $subjectClass,
+            $userId,
+            $lang
+        );
+        $data['isManager'] = self::isManager();
+
+        return $this->apiResponseWithContext($data);
+    }
+
+    /**
+     * Current user's logs for history screen with cursor pagination.
+     */
+    public function historyMeLogs(Request $request): JsonResponse
+    {
+        $period = $request->input('period', PeriodHelper::PERIOD_WEEK);
+        if (!PeriodHelper::isValidPeriod($period)) {
+            $period = PeriodHelper::PERIOD_WEEK;
+        }
+        $cursorRaw = $request->input('cursor');
+        $cursorId = $cursorRaw !== null && $cursorRaw !== '' ? (int) $cursorRaw : null;
+
+        $lang = $this->parseLanguage($request);
+
+        $userId = self::currentUserId();
+        $subjectClass = $this->workpointService->getSubjectClass();
+        $data = $this->workpointService->buildUserHistoryLogs(
+            $subjectClass,
+            $userId,
+            $period,
+            $cursorId,
+            $lang
+        );
+
+        return $this->apiResponseWithContext($data);
+    }
+
+    /**
+     * Summary for one user (self or manager).
+     */
+    public function historyUserSummary(Request $request, int $subjectId): JsonResponse
+    {
+        $deny = $this->authorizeHistoryAccess();
+        if ($deny !== null) {
+            return $deny;
+        }
+
+        $lang = $this->parseLanguage($request);
+        $subjectClass = $this->workpointService->getSubjectClass();
+        $data = $this->workpointService->buildUserHistorySummary(
+            $subjectClass,
+            $subjectId,
+            $lang
+        );
+
+        return $this->apiResponseWithContext($data);
+    }
+
+    /**
+     * Paginated logs for one user (self or manager).
+     */
+    public function historyUserLogs(Request $request, int $subjectId): JsonResponse
+    {
+        $deny = $this->authorizeHistoryAccess();
+        if ($deny !== null) {
+            return $deny;
+        }
+
+        $period = $request->input('period', PeriodHelper::PERIOD_WEEK);
+        if (!PeriodHelper::isValidPeriod($period)) {
+            $period = PeriodHelper::PERIOD_WEEK;
+        }
+        $cursorRaw = $request->input('cursor');
+        $cursorId = $cursorRaw !== null && $cursorRaw !== '' ? (int) $cursorRaw : null;
+        $lang = $this->parseLanguage($request);
+
+        $subjectClass = $this->workpointService->getSubjectClass();
+        $data = $this->workpointService->buildUserHistoryLogs(
+            $subjectClass,
+            $subjectId,
+            $period,
+            $cursorId,
+            $lang
+        );
+
+        return $this->apiResponseWithContext($data);
+    }
+
+    /**
+     * Cursor-paginated list of users who have workpoints in the current zone (manager).
+     */
+    public function adminSubjects(Request $request): JsonResponse
+    {
+        $cursor = $request->input('cursor');
+        $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
+
+        $data = $this->workpointService->listSubjectsInZoneCursor($cursor);
+
+        return $this->apiResponseWithContext($data);
+    }
 }

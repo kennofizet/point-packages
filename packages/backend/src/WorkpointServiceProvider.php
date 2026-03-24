@@ -23,7 +23,7 @@ class WorkpointServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__ . '/Config/workpoint_cases.php' => config_path('workpoint_cases.php'),
-        ], 'workpoint-config');
+        ], 'workpoint-cases-config');
 
         $this->publishes([
             __DIR__ . '/Migrations' => database_path('migrations'),

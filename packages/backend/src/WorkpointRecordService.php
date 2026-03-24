@@ -12,8 +12,8 @@ use Kennofizet\Workpoint\Services\PeriodTotalsSync;
 use Kennofizet\Workpoint\Support\PeriodHelper;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
+use Carbon\Carbon;
 
 class WorkpointRecordService
 {
@@ -106,9 +106,9 @@ class WorkpointRecordService
     {
         $zoneId = BaseModelActions::currentUserZoneId();
         $periodKey = PeriodHelper::periodKey($period);
-        $table = WorkpointPeriodTotal::getTableName();
 
-        $query = DB::table($table)
+        $query = WorkpointPeriodTotal::query()
+            ->select('subject_type', 'subject_id', 'total_points')
             ->where('period_type', $period)
             ->where('period_key', $periodKey)
             ->orderByDesc('total_points')
@@ -118,7 +118,7 @@ class WorkpointRecordService
             $query->where('zone_id', $zoneId);
         }
 
-        $rows = $query->get(['subject_type', 'subject_id', 'total_points']);
+        $rows = $query->get();
 
         $items = $rows->map(fn ($row) => [
             'subject_type' => $row->subject_type,
@@ -190,7 +190,12 @@ class WorkpointRecordService
 
         return $items->map(function (array $item) use ($namesByKey) {
             $key = $item['subject_type'] . '|' . $item['subject_id'];
-            $item['subject_name'] = $namesByKey[$key] ?? null;
+            if(isset($namesByKey[$key])){
+                $item['subject_name'] = $namesByKey[$key];
+                unset($item['subject_type']);
+            }else{
+                $item['subject_name'] = null;
+            }
             return $item;
         });
     }
@@ -264,6 +269,10 @@ class WorkpointRecordService
                 }
                 if (is_array($o->descriptions) && $o->descriptions !== []) {
                     $merged['descriptions'] = array_merge($merged['descriptions'] ?? [], $o->descriptions);
+                }
+            }else{
+                if($merged['points'] == 0 && !BaseModelActions::isManager()){
+                    continue;
                 }
             }
             $descriptions = $merged['descriptions'] ?? [];
@@ -366,5 +375,374 @@ class WorkpointRecordService
                 $listener->handle($record);
             }
         }
+    }
+
+    /**
+     * Configured subject class (polymorphic subject_type), e.g. App\Models\User.
+     *
+     * @return class-string
+     */
+    public function getSubjectClass(): string
+    {
+        $class = $this->config->get('workpoint.subject_class', 'App\\Models\\User');
+        return is_string($class) && $class !== '' ? $class : 'App\\Models\\User';
+    }
+
+    /**
+     * Paginated workpoint rows for a subject in the current zone and time window (period).
+     * Returns only fields required by frontend history UI.
+     *
+     * @param  array<string, string>  $caseNameByKey
+     * @return array{items: array<int, array{id: int, case_key: string, case_name: string, points_delta: int, created_at: string|null}>, next_cursor: string|null}
+     */
+    public function getHistoryForSubject(
+        string $subjectType,
+        int $subjectId,
+        string $period,
+        ?int $cursorId,
+        array $caseNameByKey = [],
+        ?int $perPage = null
+    ): array {
+        if (!PeriodHelper::isValidPeriod($period)) {
+            $period = PeriodHelper::PERIOD_WEEK;
+        }
+        $perPage = $perPage ?? (int) $this->config->get('workpoint.history_per_page', 30);
+        $perPage = min(max($perPage, 1), 100);
+
+        $range = PeriodHelper::range($period);
+        $table = WorkpointRecord::getTableName();
+
+        $q = WorkpointRecord::query()
+            ->inCurrentZone()
+            ->where($table . '.subject_type', $subjectType)
+            ->where($table . '.subject_id', $subjectId)
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
+            ->orderByDesc($table . '.id');
+
+        if ($cursorId !== null) {
+            $q->where($table . '.id', '<', $cursorId);
+        }
+
+        $rows = $q->limit($perPage + 1)->get([
+            'id',
+            'action_key',
+            'points_delta',
+            'created_at',
+        ]);
+
+        $hasMore = $rows->count() > $perPage;
+        $slice = $hasMore ? $rows->take($perPage) : $rows;
+
+        $nextCursor = null;
+        if ($hasMore && $slice->isNotEmpty()) {
+            $last = $slice->last();
+            $nextCursor = (string) $last->id;
+        }
+
+        $items = $slice->map(function (WorkpointRecord $r) use ($caseNameByKey) {
+            $caseKey = (string) $r->action_key;
+            $caseName = $caseNameByKey[$caseKey] ?? $caseKey;
+            return [
+                'case_name' => $caseName,
+                'points_delta' => (int) $r->points_delta,
+                'created_at' => $r->created_at?->toIso8601String(),
+            ];
+        })->values()->all();
+
+        return [
+            'items' => $items,
+            'next_cursor' => $nextCursor,
+        ];
+    }
+
+    /**
+     * Leaderboard position (1-based) for one subject in the given period within current zone.
+     */
+    public function getRankForSubjectInPeriod(string $subjectType, int $subjectId, string $period): ?int
+    {
+        if (!PeriodHelper::isValidPeriod($period)) {
+            return null;
+        }
+
+        $myTotal = $this->getSubjectTotalInPeriod($subjectType, $subjectId, $period);
+
+        $range = PeriodHelper::range($period);
+        $table = WorkpointRecord::getTableName();
+        $zoneId = BaseModelActions::currentUserZoneId();
+
+        $q = WorkpointRecord::query()
+            ->where($table . '.subject_type', $subjectType)
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
+            ->selectRaw($table . '.subject_id, SUM(' . $table . '.points_delta) as total_points')
+            ->groupBy($table . '.subject_id')
+            ->havingRaw('SUM(' . $table . '.points_delta) > ?', [$myTotal]);
+
+        if ($zoneId !== null) {
+            $q->where($table . '.zone_id', $zoneId);
+        }
+
+        $betterCount = $q->count();
+
+        return $betterCount + 1;
+    }
+
+    /**
+     * Total points for subject in period (current zone).
+     */
+    public function getSubjectTotalInPeriod(string $subjectType, int $subjectId, string $period): int
+    {
+        if (!PeriodHelper::isValidPeriod($period)) {
+            return 0;
+        }
+        $range = PeriodHelper::range($period);
+        $table = WorkpointRecord::getTableName();
+
+        $q = WorkpointRecord::query()
+            ->inCurrentZone()
+            ->where($table . '.subject_type', $subjectType)
+            ->where($table . '.subject_id', $subjectId)
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']]);
+
+        return (int) $q->sum('points_delta');
+    }
+
+    /**
+     * Max total points achievable for this rule (for progress display).
+     * - count_cap_per_period: points × cap (cap = max awards per period).
+     * - first_time / first_time_per_period / first_time_per_target: one award → max = points.
+     * - none / no cap on count: unlimited → null.
+     */
+    public function maxPointsForRuleDisplay(array $rule): ?int
+    {
+        $points = (int) ($rule['points'] ?? 0);
+        $check = (string) ($rule['check'] ?? 'none');
+        $cap = isset($rule['cap']) ? (int) $rule['cap'] : null;
+
+        if ($check === 'count_cap_per_period') {
+            if ($cap !== null && $cap > 0 && $points > 0) {
+                return $points * $cap;
+            }
+
+            return null;
+        }
+
+        if (in_array($check, ['first_time', 'first_time_per_period', 'first_time_per_target'], true)) {
+            return $points > 0 ? $points : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Points earned today per action_key, merged with zone rules (description, cap).
+     *
+     * @return array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>
+     */
+    public function getTodayProgressByRules(string $subjectType, int $subjectId, ?int $zoneId, string $lang): array
+    {
+        $range = PeriodHelper::range(PeriodHelper::PERIOD_DAY);
+        $table = WorkpointRecord::getTableName();
+
+        $q = WorkpointRecord::query()
+            ->where($table . '.subject_type', $subjectType)
+            ->where($table . '.subject_id', $subjectId)
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']]);
+
+        if ($zoneId !== null) {
+            $q->where($table . '.zone_id', $zoneId);
+        } else {
+            $q->inCurrentZone();
+        }
+
+        $earned = $q->selectRaw('action_key, SUM(points_delta) as total')
+            ->groupBy('action_key')
+            ->pluck('total', 'action_key');
+
+        $rules = $this->getMergedRulesForZone($zoneId ?? BaseModelActions::currentUserZoneId(), $lang);
+        $out = [];
+        foreach ($rules as $rule) {
+            $key = $rule['key'];
+
+            if($rule['points'] == 0){
+                continue;
+            }
+            
+            $out[] = [
+                'description' => $rule['description'],
+                'earned' => (int) ($earned[$key] ?? 0),
+                'max_points' => $this->maxPointsForRuleDisplay($rule)
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Distinct subjects (same subject_class) in zone with cursor pagination on (last_at, subject_id).
+     *
+     * @return array{items: array<int, array{subject_type: string, subject_id: int, last_at: string|null, subject_name?: string|null}>, next_cursor: string|null}
+     */
+    public function listSubjectsInZoneCursor(?string $cursorEncoded, ?int $perPage = null): array
+    {
+        $perPage = $perPage ?? (int) $this->config->get('workpoint.admin_subjects_per_page', 30);
+        $perPage = min(max($perPage, 1), 100);
+
+        $zoneId = BaseModelActions::currentUserZoneId();
+        $subjectClass = $this->getSubjectClass();
+        $table = WorkpointRecord::getTableName();
+
+        /** @var array{last_at: string, subject_id: int}|null $cursor */
+        $cursor = null;
+        if ($cursorEncoded !== null && $cursorEncoded !== '') {
+            $decodedRaw = base64_decode($cursorEncoded, true);
+            if ($decodedRaw !== false) {
+                $decoded = json_decode($decodedRaw, true);
+                if (
+                    is_array($decoded)
+                    && isset($decoded['last_at'], $decoded['subject_id'])
+                    && is_string($decoded['last_at'])
+                    && is_numeric($decoded['subject_id'])
+                ) {
+                    $cursor = [
+                        'last_at' => $decoded['last_at'],
+                        'subject_id' => (int) $decoded['subject_id'],
+                    ];
+                }
+            }
+        }
+
+        // Build aggregate subquery first (latest record time per subject in current zone).
+        $latestBySubject = WorkpointRecord::query()
+            ->selectRaw('subject_id, MAX(created_at) as last_at')
+            ->where('subject_type', $subjectClass)
+            ->groupBy('subject_id')
+            ->toBase();
+
+        if ($zoneId === null) {
+            $latestBySubject->whereNull('zone_id');
+        } else {
+            $latestBySubject->where('zone_id', $zoneId);
+        }
+
+        $rowsQuery = WorkpointRecord::query()
+            ->toBase()
+            ->fromSub($latestBySubject, 'subject_last')
+            ->select(['subject_id', 'last_at']);
+
+        if ($cursor !== null) {
+            $rowsQuery->where(function ($q) use ($cursor) {
+                $q->where('last_at', '<', $cursor['last_at'])
+                    ->orWhere(function ($q2) use ($cursor) {
+                        $q2->where('last_at', '=', $cursor['last_at'])
+                            ->where('subject_id', '<', $cursor['subject_id']);
+                    });
+            });
+        }
+
+        $rows = $rowsQuery
+            ->orderByDesc('last_at')
+            ->orderByDesc('subject_id')
+            ->limit($perPage + 1)
+            ->get();
+
+        $hasMore = $rows->count() > $perPage;
+        $slice = $hasMore ? $rows->take($perPage)->values() : $rows->values();
+
+        $items = [];
+        foreach ($slice as $row) {
+            $items[] = [
+                'subject_type' => $subjectClass,
+                'subject_id' => (int) $row->subject_id
+            ];
+        }
+
+        $coll = collect($items);
+        $coll = $this->addSubjectNames($coll);
+
+        $nextCursor = null;
+        if ($hasMore && $slice->isNotEmpty()) {
+            $last = $slice->last();
+            $payload = [
+                'last_at' => $last->last_at,
+                'subject_id' => (int) $last->subject_id,
+            ];
+            $nextCursor = base64_encode(json_encode($payload));
+        }
+
+        return [
+            'items' => $coll->values()->all(),
+            'next_cursor' => $nextCursor,
+        ];
+    }
+
+    /**
+     * Bundle for history detail (manager or self): history slice + ranks + today progress.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildUserHistoryDetail(
+        string $subjectType,
+        int $subjectId,
+        string $historyPeriod,
+        ?int $historyCursorId,
+        string $lang
+    ): array {
+        $summary = $this->buildUserHistorySummary($subjectType, $subjectId, $lang);
+        $history = $this->buildUserHistoryLogs($subjectType, $subjectId, $historyPeriod, $historyCursorId, $lang);
+        return array_merge($summary, $history);
+    }
+
+    /**
+     * Summary for history screen (no logs): totals + ranks + today progress.
+     *
+     * @return array{totals: array<string, int>, ranks: array<string, int|null>, today_by_rule: array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>}
+     */
+    public function buildUserHistorySummary(
+        string $subjectType,
+        int $subjectId,
+        string $lang
+    ): array {
+        $zoneId = BaseModelActions::currentUserZoneId();
+        return [
+            'totals' => [
+                'day' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_DAY),
+                'week' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_WEEK),
+                'month' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_MONTH),
+                'year' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_YEAR),
+            ],
+            'ranks' => [
+                'day' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_DAY),
+                'week' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_WEEK),
+                'month' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_MONTH),
+                'year' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_YEAR),
+            ],
+            'today_by_rule' => $this->getTodayProgressByRules($subjectType, $subjectId, $zoneId, $lang),
+        ];
+    }
+
+    /**
+     * Paginated history logs for history screen only.
+     *
+     * @return array{period: string, items: array<int, array{id: int, case_key: string, case_name: string, points_delta: int, created_at: string|null}>, next_cursor: string|null}
+     */
+    public function buildUserHistoryLogs(
+        string $subjectType,
+        int $subjectId,
+        string $historyPeriod,
+        ?int $historyCursorId,
+        string $lang
+    ): array {
+        $zoneId = BaseModelActions::currentUserZoneId();
+        $rules = $this->getMergedRulesForZone($zoneId, $lang);
+        $caseNameByKey = [];
+        foreach ($rules as $rule) {
+            $key = (string) ($rule['key'] ?? '');
+            if ($key !== '') {
+                $caseNameByKey[$key] = (string) ($rule['description'] ?? $key);
+            }
+        }
+        $history = $this->getHistoryForSubject($subjectType, $subjectId, $historyPeriod, $historyCursorId, $caseNameByKey);
+
+        return array_merge(['period' => $historyPeriod], $history);
     }
 }

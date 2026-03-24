@@ -26,6 +26,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Subject model class (for history / admin APIs)
+    |--------------------------------------------------------------------------
+    | Must match the model used with HasWorkpointRecords (polymorphic subject_type).
+    */
+    'subject_class' => env('WORKPOINT_SUBJECT_CLASS', 'App\\Models\\User'),
+
+    /** Default page size for history lists (cursor pagination). */
+    'history_per_page' => (int) env('WORKPOINT_HISTORY_PER_PAGE', 30),
+
+    /** Default page size for manager subject list (cursor pagination). */
+    'admin_subjects_per_page' => (int) env('WORKPOINT_ADMIN_SUBJECTS_PER_PAGE', 30),
+
+    /*
+    |--------------------------------------------------------------------------
     | Event fired when a workpoint is recorded
     |--------------------------------------------------------------------------
     | The main app (or Coin package) can listen to this event.

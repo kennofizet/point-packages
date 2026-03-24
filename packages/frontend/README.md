@@ -1,6 +1,6 @@
 # Workpoint Frontend
 
-Vue 3 UI for **workpoint**: top users ranking (day/week/month/year), rules page, and point-earned notification. Uses **packages-core** for zones and **workpoint-backend** for top & rules APIs. Host app provides `coreUrl`, `backendUrl`, and `token`.
+Vue 3 UI for **workpoint**: top users ranking (day/week/month/year), rules page, **point history** (filters by zone + period; managers get a user list with cursor pagination + per-user detail), and point-earned notification. Uses **packages-core** for zones and **workpoint-backend** for top & rules APIs. Host app provides `coreUrl`, `backendUrl`, and `token`.
 
 ---
 
@@ -76,7 +76,7 @@ Leaderboard + rules view. Fetches zones from core; top and rules from workpoint 
 
 **Slots:** `subject` — custom content for each row (receives `item`, `rank`).
 
-**Behaviour:** Zone selector (if multiple zones); period tabs; “Rules” button toggles to rules view. Managers get “Setting” and “Reset default” for zone rules. Needs `workpointApi` injected (or provided by plugin).
+**Behaviour:** Zone selector (if multiple zones); period tabs; **“History”** opens point log + totals + ranks + today-by-rule; **“Rules”** toggles to rules view. Managers see a split layout: user list (load more) → detail for selected user. Needs `workpointApi` injected (or provided by plugin).
 
 ---
 

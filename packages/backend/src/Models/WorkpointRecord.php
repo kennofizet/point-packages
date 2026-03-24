@@ -22,6 +22,15 @@ class WorkpointRecord extends Model
         'payload',
     ];
 
+    protected $hidden = [
+        'subject_type',
+        'subject_id',
+        'target_type',
+        'target_id',
+        'action_key',
+        'points_delta'
+    ];
+
     protected $casts = [
         'payload' => 'array',
     ];

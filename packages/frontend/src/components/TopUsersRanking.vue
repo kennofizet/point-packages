@@ -18,9 +18,16 @@
             </option>
           </select>
         </div>
-        <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = viewMode === 'rules' ? 'ranking' : 'rules'">
-          {{ viewMode === 'rules' ? t.rankingBtn : t.ruleBtn }}
-        </button>
+        <div class="workpoint-top-users__header-actions">
+          <template v-if="viewMode === 'history'">
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'ranking'">{{ t.rankingBtn }}</button>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'rules'">{{ t.ruleBtn }}</button>
+          </template>
+          <template v-else>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'history'">{{ t.historyBtn }}</button>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="toggleRulesRanking">{{ viewMode === 'rules' ? t.rankingBtn : t.ruleBtn }}</button>
+          </template>
+        </div>
       </template>
       <template v-else>
         <div class="workpoint-top-users__tabs" v-if="viewMode === 'ranking'">
@@ -35,9 +42,16 @@
             {{ t.period(p.value) }}
           </button>
         </div>
-        <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = viewMode === 'rules' ? 'ranking' : 'rules'">
-          {{ viewMode === 'rules' ? t.rankingBtn : t.ruleBtn }}
-        </button>
+        <div class="workpoint-top-users__header-actions">
+          <template v-if="viewMode === 'history'">
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'ranking'">{{ t.rankingBtn }}</button>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'rules'">{{ t.ruleBtn }}</button>
+          </template>
+          <template v-else>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="viewMode = 'history'">{{ t.historyBtn }}</button>
+            <button type="button" class="workpoint-top-users__rule-btn" @click="toggleRulesRanking">{{ viewMode === 'rules' ? t.rankingBtn : t.ruleBtn }}</button>
+          </template>
+        </div>
       </template>
     </div>
 
@@ -50,6 +64,20 @@
         class="workpoint-top-users__tab"
         :class="{ 'workpoint-top-users__tab--active': period === p.value }"
         @click="selectPeriod(p.value)"
+      >
+        {{ t.period(p.value) }}
+      </button>
+    </div>
+
+    <!-- History: period filter (day / week / month / year) -->
+    <div v-if="viewMode === 'history' && hasZoneContext" class="workpoint-top-users__tabs">
+      <button
+        v-for="p in periods"
+        :key="'h-' + p.value"
+        type="button"
+        class="workpoint-top-users__tab"
+        :class="{ 'workpoint-top-users__tab--active': historyPeriod === p.value }"
+        @click="selectHistoryPeriod(p.value)"
       >
         {{ t.period(p.value) }}
       </button>
@@ -68,25 +96,27 @@
           </button>
         </template>
       </div>
-      <div v-if="rulesLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
-      <ul v-else class="workpoint-top-users__rule-list">
-        <li
-          v-for="(rule, index) in rulesList"
-          :key="rule.key"
-          class="workpoint-top-users__rule-card"
-        >
-          <span class="workpoint-top-users__rule-index">#{{ index + 1 }}</span>
-          <div class="workpoint-top-users__rule-body">
-            <p class="workpoint-top-users__rule-desc">{{ rule.description }}</p>
-            <div class="workpoint-top-users__rule-meta">
-              <span class="workpoint-top-users__rule-points">{{ rule.points }} {{ t.pts }}</span>
-              <span v-if="rule.period" class="workpoint-top-users__rule-period">{{ t.periodLabel }}: {{ t.period(rule.period) }}</span>
-              <span v-if="rule.cap != null" class="workpoint-top-users__rule-cap">{{ t.capLabel }}: {{ rule.cap }}</span>
+      <div class="workpoint-top-users__rule-scroll">
+        <div v-if="rulesLoading" class="workpoint-top-users__loading workpoint-top-users__loading--rules">{{ t.loading }}</div>
+        <ul v-else-if="rulesList.length" class="workpoint-top-users__rule-list">
+          <li
+            v-for="(rule, index) in rulesList"
+            :key="rule.key"
+            class="workpoint-top-users__rule-card"
+          >
+            <span class="workpoint-top-users__rule-index">#{{ index + 1 }}</span>
+            <div class="workpoint-top-users__rule-body">
+              <p class="workpoint-top-users__rule-desc">{{ rule.description }}</p>
+              <div class="workpoint-top-users__rule-meta">
+                <span class="workpoint-top-users__rule-points">{{ rule.points }} {{ t.pts }}</span>
+                <span v-if="rule.period" class="workpoint-top-users__rule-period">{{ t.periodLabel }}: {{ t.period(rule.period) }}</span>
+                <span v-if="rule.cap != null" class="workpoint-top-users__rule-cap">{{ t.capLabel }}: {{ rule.cap }}</span>
+              </div>
             </div>
-          </div>
-        </li>
-      </ul>
-      <p v-if="!rulesLoading && !rulesList.length" class="workpoint-top-users__empty">{{ t.noRules }}</p>
+          </li>
+        </ul>
+        <p v-else class="workpoint-top-users__empty">{{ t.noRules }}</p>
+      </div>
 
       <!-- Setting popup (manager): step 1 case key → step 2 check/cap/period → step 3 points + descriptions -->
       <div v-if="settingPopupOpen" class="workpoint-top-users__popup-overlay" @click.self="closeSettingPopup">
@@ -146,6 +176,137 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- History: my points / manager inspect -->
+    <div v-else-if="viewMode === 'history' && !hasZoneContext" class="workpoint-top-users__history">
+      <p class="workpoint-top-users__empty">{{ t.noZone }}</p>
+    </div>
+    <div v-else-if="viewMode === 'history' && hasZoneContext" class="workpoint-top-users__history">
+      <div v-if="historyLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
+      <template v-else-if="historyIsManager">
+        <div class="workpoint-top-users__history-split">
+          <aside ref="userListScrollRef" class="workpoint-top-users__history-aside">
+            <h3 class="workpoint-top-users__history-aside-title">{{ t.usersListTitle }}</h3>
+            <div v-if="adminSubjectsLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
+            <ul v-else class="workpoint-top-users__user-list">
+              <li
+                v-for="u in adminSubjects"
+                :key="'u-' + u.subject_id"
+                class="workpoint-top-users__user-item"
+                :class="{ 'workpoint-top-users__user-item--active': selectedSubjectId === u.subject_id }"
+                @click="selectManagerUser(u)"
+              >
+                <span class="workpoint-top-users__user-name">
+                  <slot name="subject" :item="u" :rank="0">
+                    {{ u.subject_name || t.userLabel(u.subject_id) }}
+                  </slot>
+                </span>
+                <span class="workpoint-top-users__user-meta">#{{ u.subject_id }}</span>
+              </li>
+            </ul>
+            <div v-if="adminSubjectsLoadingMore" class="workpoint-top-users__skeleton-list">
+              <div v-for="n in 4" :key="'user-sk-' + n" class="workpoint-top-users__skeleton workpoint-top-users__skeleton--user"></div>
+            </div>
+            <div
+              v-if="adminSubjectsNextCursor"
+              ref="userListSentinelRef"
+              class="workpoint-top-users__infinite-sentinel"
+              aria-hidden="true"
+            ></div>
+            <p v-if="!adminSubjectsLoading && !adminSubjects.length" class="workpoint-top-users__empty">{{ t.noData }}</p>
+          </aside>
+          <div ref="historyLogScrollRef" class="workpoint-top-users__history-main">
+            <template v-if="selectedSubjectId != null">
+              <div v-if="detailLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
+              <template v-else>
+                <h3 class="workpoint-top-users__history-detail-title">{{ t.detailForUser }} #{{ selectedSubjectId }}</h3>
+                <div class="workpoint-top-users__history-stats">
+                  <div class="workpoint-top-users__stat-row">
+                    <span>{{ t.totalsTitle }}</span>
+                    <span>{{ t.period('day') }}: {{ historyTotals.day }} · {{ t.period('week') }}: {{ historyTotals.week }} · {{ t.period('month') }}: {{ historyTotals.month }} · {{ t.period('year') }}: {{ historyTotals.year }}</span>
+                  </div>
+                  <div class="workpoint-top-users__stat-row">
+                    <span>{{ t.ranksTitle }}</span>
+                    <span>#{{ historyRanks.day ?? '—' }} / #{{ historyRanks.week ?? '—' }} / #{{ historyRanks.month ?? '—' }} / #{{ historyRanks.year ?? '—' }}</span>
+                  </div>
+                </div>
+                <h4 class="workpoint-top-users__history-subtitle">{{ t.todayByRuleTitle }}</h4>
+                <ul v-if="todayByRuleList.length" class="workpoint-top-users__today-rules">
+                  <li v-for="r in todayByRuleList" :key="r.key" class="workpoint-top-users__today-rule">
+                    <span>{{ r.description }}</span>
+                    <span>{{ formatTodayRuleProgress(r) }}</span>
+                  </li>
+                </ul>
+                <p v-else class="workpoint-top-users__empty">{{ t.noRules }}</p>
+                <h4 class="workpoint-top-users__history-subtitle">{{ t.historyLogTitle }}</h4>
+                <ul class="workpoint-top-users__history-log">
+                  <li v-for="row in historyRows" :key="'hrow-' + row.id" class="workpoint-top-users__history-log-row">
+                    <span class="workpoint-top-users__history-log-time">
+                      <span class="workpoint-top-users__history-log-date">{{ formatHistoryDate(row.created_at) }}</span>
+                      <span class="workpoint-top-users__history-log-clock">{{ formatHistoryClock(row.created_at) }}</span>
+                    </span>
+                    <span class="workpoint-top-users__history-log-key">{{ row.case_name }}</span>
+                    <span class="workpoint-top-users__history-log-pts">+{{ row.points_delta }}</span>
+                  </li>
+                </ul>
+                <div v-if="historyLoadingMore" class="workpoint-top-users__skeleton-list">
+                  <div v-for="n in 3" :key="'log-sk-mg-' + n" class="workpoint-top-users__skeleton workpoint-top-users__skeleton--log"></div>
+                </div>
+                <div
+                  v-if="historyNextCursor"
+                  ref="historyLogSentinelRef"
+                  class="workpoint-top-users__infinite-sentinel"
+                  aria-hidden="true"
+                ></div>
+              </template>
+            </template>
+            <p v-else class="workpoint-top-users__empty">{{ t.selectUserHint }}</p>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div ref="historyLogScrollRef" class="workpoint-top-users__history-my">
+          <div class="workpoint-top-users__history-stats">
+            <div class="workpoint-top-users__stat-row">
+              <span>{{ t.totalsTitle }}</span>
+              <span>{{ t.period('day') }}: {{ historyTotals.day }} · {{ t.period('week') }}: {{ historyTotals.week }} · {{ t.period('month') }}: {{ historyTotals.month }} · {{ t.period('year') }}: {{ historyTotals.year }}</span>
+            </div>
+            <div class="workpoint-top-users__stat-row">
+              <span>{{ t.ranksTitle }}</span>
+              <span>#{{ historyRanks.day ?? '—' }} / #{{ historyRanks.week ?? '—' }} / #{{ historyRanks.month ?? '—' }} / #{{ historyRanks.year ?? '—' }}</span>
+            </div>
+          </div>
+          <h4 class="workpoint-top-users__history-subtitle">{{ t.todayByRuleTitle }}</h4>
+          <ul v-if="todayByRuleList.length" class="workpoint-top-users__today-rules">
+            <li v-for="r in todayByRuleList" :key="'m-' + r.key" class="workpoint-top-users__today-rule">
+              <span>{{ r.description }}</span>
+              <span>{{ formatTodayRuleProgress(r) }}</span>
+            </li>
+          </ul>
+          <p v-else class="workpoint-top-users__empty">{{ t.noRules }}</p>
+          <h4 class="workpoint-top-users__history-subtitle">{{ t.historyLogTitle }}</h4>
+          <ul class="workpoint-top-users__history-log">
+            <li v-for="row in historyRows" :key="'my-' + row.id" class="workpoint-top-users__history-log-row">
+              <span class="workpoint-top-users__history-log-time">
+                <span class="workpoint-top-users__history-log-date">{{ formatHistoryDate(row.created_at) }}</span>
+                <span class="workpoint-top-users__history-log-clock">{{ formatHistoryClock(row.created_at) }}</span>
+              </span>
+              <span class="workpoint-top-users__history-log-key">{{ row.case_name }}</span>
+              <span class="workpoint-top-users__history-log-pts">+{{ row.points_delta }}</span>
+            </li>
+          </ul>
+          <div v-if="historyLoadingMore" class="workpoint-top-users__skeleton-list">
+            <div v-for="n in 3" :key="'log-sk-me-' + n" class="workpoint-top-users__skeleton workpoint-top-users__skeleton--log"></div>
+          </div>
+          <div
+            v-if="historyNextCursor"
+            ref="historyLogSentinelRef"
+            class="workpoint-top-users__infinite-sentinel"
+            aria-hidden="true"
+          ></div>
+        </div>
+      </template>
     </div>
 
     <!-- Ranking content (when viewMode === 'ranking') -->
@@ -209,7 +370,7 @@
 </template>
 
 <script setup>
-import { ref, watch, inject, computed, onMounted, isRef } from 'vue'
+import { ref, watch, inject, computed, onMounted, onBeforeUnmount, nextTick, isRef } from 'vue'
 
 const props = defineProps({
   /** UI language: 'vi' | 'en'. Can be a ref so host can change it and component updates. */
@@ -272,6 +433,15 @@ const TRANSLATIONS = {
     prev: 'Trước',
     next: 'Tiếp',
     save: 'Lưu',
+    historyBtn: 'Lịch sử',
+    usersListTitle: 'Thành viên',
+    totalsTitle: 'Tổng điểm',
+    ranksTitle: 'Hạng (ngày/tuần/tháng/năm)',
+    todayByRuleTitle: 'Tiến độ hôm nay theo quy định',
+    historyLogTitle: 'Nhật ký nhận điểm',
+    loadMore: 'Tải thêm',
+    selectUserHint: 'Chọn một người dùng bên trái để xem chi tiết.',
+    detailForUser: 'Chi tiết',
   },
   en: {
     zone: 'Zone',
@@ -305,6 +475,15 @@ const TRANSLATIONS = {
     prev: 'Previous',
     next: 'Next',
     save: 'Save',
+    historyBtn: 'History',
+    usersListTitle: 'Members',
+    totalsTitle: 'Totals',
+    ranksTitle: 'Rank (day / week / month / year)',
+    todayByRuleTitle: 'Today progress by rule',
+    historyLogTitle: 'Point log',
+    loadMore: 'Load more',
+    selectUserHint: 'Select a user on the left to see details.',
+    detailForUser: 'Details',
   },
 }
 
@@ -347,6 +526,39 @@ const settingForm = ref({
 const settingDescLang = ref('vi')
 const savingRule = ref(false)
 
+/** History view */
+const historyPeriod = ref(
+  PERIOD_KEYS.includes(props.initialPeriod) ? props.initialPeriod : 'week'
+)
+const historyLoading = ref(false)
+const historyIsManager = ref(false)
+const historyRows = ref([])
+const historyTotals = ref({ day: 0, week: 0, month: 0, year: 0 })
+const historyRanks = ref({ day: null, week: null, month: null, year: null })
+const todayByRule = ref([])
+/** Always an array — API may send null; avoids empty <ul> and matches "no rules" UX. */
+const todayByRuleList = computed(() => {
+  const v = todayByRule.value
+  return Array.isArray(v) ? v : []
+})
+const historyNextCursor = ref(null)
+const historyLoadingMore = ref(false)
+
+const adminSubjects = ref([])
+const adminSubjectsLoading = ref(false)
+const adminSubjectsLoadingMore = ref(false)
+const adminSubjectsNextCursor = ref(null)
+const selectedSubjectId = ref(null)
+const detailLoading = ref(false)
+
+// Infinite scroll sentinels
+const userListScrollRef = ref(null)
+const userListSentinelRef = ref(null)
+const historyLogScrollRef = ref(null)
+const historyLogSentinelRef = ref(null)
+let userListObserver = null
+let historyLogObserver = null
+
 const t = computed(() => {
   const lang = TRANSLATIONS[effectiveLanguage.value] || TRANSLATIONS.vi
   return {
@@ -378,6 +590,15 @@ const t = computed(() => {
     prev: lang.prev,
     next: lang.next,
     save: lang.save,
+    historyBtn: lang.historyBtn,
+    usersListTitle: lang.usersListTitle,
+    totalsTitle: lang.totalsTitle,
+    ranksTitle: lang.ranksTitle,
+    todayByRuleTitle: lang.todayByRuleTitle,
+    historyLogTitle: lang.historyLogTitle,
+    loadMore: lang.loadMore,
+    selectUserHint: lang.selectUserHint,
+    detailForUser: lang.detailForUser,
   }
 })
 
@@ -473,6 +694,8 @@ function onZoneChange() {
   }
   if (viewMode.value === 'rules') {
     fetchRules()
+  } else if (viewMode.value === 'history') {
+    loadHistoryEntry()
   } else {
     fetchTop()
   }
@@ -588,17 +811,296 @@ async function resetDefaultConfig() {
   }
 }
 
+function toggleRulesRanking() {
+  if (viewMode.value === 'rules') viewMode.value = 'ranking'
+  else viewMode.value = 'rules'
+}
+
+function parseHistorySummaryPayload(payload) {
+  if (!payload) return
+  historyTotals.value = payload.totals || { day: 0, week: 0, month: 0, year: 0 }
+  historyRanks.value = payload.ranks || { day: null, week: null, month: null, year: null }
+  todayByRule.value = Array.isArray(payload.today_by_rule) ? payload.today_by_rule : []
+}
+
+function parseHistoryLogsPayload(payload) {
+  if (!payload) return
+  historyNextCursor.value = payload.next_cursor ?? null
+}
+
+/** Earned today vs max earnable (API: max_points = points×cap for count_cap_per_period; one-shot rules → points). */
+function formatTodayRuleProgress(r) {
+  const earned = Number(r?.earned ?? 0)
+  const rawMax = r?.max_points
+  const max = rawMax != null && rawMax !== '' ? Number(rawMax) : null
+  const pts = t.value.pts
+  if (max != null && !Number.isNaN(max)) {
+    return `${earned} / ${max} ${pts}`
+  }
+  return `${earned} ${pts}`
+}
+
+function formatHistoryDate(iso) {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString(effectiveLanguage.value === 'en' ? 'en-GB' : 'vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  } catch (_) {
+    return iso
+  }
+}
+
+function formatHistoryClock(iso) {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    return d.toLocaleTimeString(effectiveLanguage.value === 'en' ? 'en-GB' : 'vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch (_) {
+    return '—'
+  }
+}
+
+function destroyHistoryObservers() {
+  if (userListObserver) {
+    userListObserver.disconnect()
+    userListObserver = null
+  }
+  if (historyLogObserver) {
+    historyLogObserver.disconnect()
+    historyLogObserver = null
+  }
+}
+
+async function refreshHistoryObservers() {
+  destroyHistoryObservers()
+  await nextTick()
+
+  if (
+    viewMode.value === 'history'
+    && historyIsManager.value
+    && userListScrollRef.value
+    && userListSentinelRef.value
+  ) {
+    userListObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            loadMoreAdminSubjects()
+          }
+        }
+      },
+      {
+        root: userListScrollRef.value,
+        rootMargin: '0px 0px 220px 0px',
+        threshold: 0.01,
+      }
+    )
+    userListObserver.observe(userListSentinelRef.value)
+  }
+
+  if (
+    viewMode.value === 'history'
+    && historyLogScrollRef.value
+    && historyLogSentinelRef.value
+  ) {
+    historyLogObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            if (historyIsManager.value) loadMoreHistoryUser()
+            else loadMoreHistoryMe()
+          }
+        }
+      },
+      {
+        root: historyLogScrollRef.value,
+        rootMargin: '0px 0px 220px 0px',
+        threshold: 0.01,
+      }
+    )
+    historyLogObserver.observe(historyLogSentinelRef.value)
+  }
+}
+
+async function loadHistoryEntry() {
+  if (!workpointApi || !hasZoneContext.value) return
+  historyLoading.value = true
+  try {
+    const resSummary = await workpointApi.getHistoryMeSummary(effectiveLanguage.value)
+    const dataSummary = resSummary?.data
+    const payloadSummary = dataSummary?.datas ?? dataSummary?.data ?? dataSummary
+    parseHistorySummaryPayload(payloadSummary)
+    historyIsManager.value = !!payloadSummary?.isManager
+    isManager.value = historyIsManager.value
+
+    if (historyIsManager.value) {
+      adminSubjects.value = []
+      adminSubjectsNextCursor.value = null
+      selectedSubjectId.value = null
+      historyRows.value = []
+      await loadAdminSubjects(true)
+    } else {
+      await fetchHistoryMeLogs(true)
+    }
+  } catch (e) {
+    console.warn('History load failed', e)
+    historyRows.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function fetchHistoryMeLogs(reset) {
+  if (!workpointApi?.getHistoryMeLogs) return
+  if (!reset) historyLoadingMore.value = true
+  try {
+    const res = await workpointApi.getHistoryMeLogs(historyPeriod.value, null, effectiveLanguage.value)
+    const data = res?.data
+    const payload = data?.datas ?? data?.data ?? data
+    parseHistoryLogsPayload(payload)
+    historyRows.value = reset ? (payload?.items || []) : [...historyRows.value, ...(payload?.items || [])]
+  } catch (_) {
+    if (reset) historyRows.value = []
+  } finally {
+    if (!reset) historyLoadingMore.value = false
+    refreshHistoryObservers()
+  }
+}
+
+async function loadMoreHistoryMe() {
+  if (!workpointApi?.getHistoryMeLogs || !historyNextCursor.value || historyLoadingMore.value) return
+  historyLoadingMore.value = true
+  try {
+    const res = await workpointApi.getHistoryMeLogs(historyPeriod.value, historyNextCursor.value, effectiveLanguage.value)
+    const data = res?.data
+    const payload = data?.datas ?? data?.data ?? data
+    parseHistoryLogsPayload(payload)
+    historyRows.value = [...historyRows.value, ...(payload?.items || [])]
+  } catch (_) {
+    /* ignore */
+  } finally {
+    historyLoadingMore.value = false
+    refreshHistoryObservers()
+  }
+}
+
+async function loadAdminSubjects(reset) {
+  if (!workpointApi?.getAdminSubjects) return
+  if (!reset && (!adminSubjectsNextCursor.value || adminSubjectsLoadingMore.value)) return
+  if (reset) {
+    adminSubjectsLoading.value = true
+  } else {
+    adminSubjectsLoadingMore.value = true
+  }
+  try {
+    const res = await workpointApi.getAdminSubjects(reset ? null : adminSubjectsNextCursor.value)
+    const data = res?.data
+    const payload = data?.datas ?? data?.data ?? data
+    const items = payload?.items || []
+    adminSubjects.value = reset ? items : [...adminSubjects.value, ...items]
+    adminSubjectsNextCursor.value = payload?.next_cursor ?? null
+  } catch (_) {
+    if (reset) adminSubjects.value = []
+  } finally {
+    adminSubjectsLoading.value = false
+    adminSubjectsLoadingMore.value = false
+    refreshHistoryObservers()
+  }
+}
+
+function loadMoreAdminSubjects() {
+  loadAdminSubjects(false)
+}
+
+async function selectManagerUser(u) {
+  const id = u.subject_id
+  if (id == null) return
+  selectedSubjectId.value = id
+  await loadHistoryUserSummary(id)
+  await loadHistoryUserLogs(id, true)
+}
+
+async function loadHistoryUserSummary(subjectId) {
+  if (!workpointApi?.getHistoryUserSummary) return
+  try {
+    const res = await workpointApi.getHistoryUserSummary(subjectId, effectiveLanguage.value)
+    const data = res?.data
+    const payload = data?.datas ?? data?.data ?? data
+    parseHistorySummaryPayload(payload)
+  } catch (_) {
+    // ignore summary error only
+  }
+}
+
+async function loadHistoryUserLogs(subjectId, reset) {
+  if (!workpointApi?.getHistoryUserLogs) return
+  if (!reset && (!historyNextCursor.value || historyLoadingMore.value)) return
+  // Full-panel loading only when switching user / period / first open — not when infinite-scroll loads more.
+  if (reset) {
+    detailLoading.value = true
+  } else {
+    historyLoadingMore.value = true
+  }
+  try {
+    const cursor = reset ? null : historyNextCursor.value
+    const res = await workpointApi.getHistoryUserLogs(subjectId, historyPeriod.value, cursor, effectiveLanguage.value)
+    const data = res?.data
+    const payload = data?.datas ?? data?.data ?? data
+    parseHistoryLogsPayload(payload)
+    historyRows.value = reset ? (payload?.items || []) : [...historyRows.value, ...(payload?.items || [])]
+  } catch (_) {
+    if (reset) historyRows.value = []
+  } finally {
+    if (reset) detailLoading.value = false
+    else historyLoadingMore.value = false
+    refreshHistoryObservers()
+  }
+}
+
+async function loadMoreHistoryUser() {
+  if (selectedSubjectId.value == null || historyLoadingMore.value) return
+  await loadHistoryUserLogs(selectedSubjectId.value, false)
+}
+
+async function selectHistoryPeriod(p) {
+  historyPeriod.value = p
+  historyNextCursor.value = null
+  if (historyIsManager.value && selectedSubjectId.value != null) {
+    await loadHistoryUserLogs(selectedSubjectId.value, true)
+  } else if (!historyIsManager.value) {
+    historyLoading.value = true
+    try {
+      await fetchHistoryMeLogs(true)
+    } finally {
+      historyLoading.value = false
+    }
+  }
+}
+
 onMounted(() => {
   fetchZones()
+})
+onBeforeUnmount(() => {
+  destroyHistoryObservers()
 })
 
 watch([period, () => props.limit], fetchTop, { immediate: false })
 watch(hasZoneContext, (ok) => {
   if (ok) fetchTop()
+  if (ok && viewMode.value === 'history') loadHistoryEntry()
 }, { immediate: true })
 
 watch(viewMode, (mode) => {
   if (mode === 'rules') fetchRules()
+  if (mode === 'history' && hasZoneContext.value) loadHistoryEntry()
+  if (mode !== 'history') destroyHistoryObservers()
 })
 watch(effectiveLanguage, () => {
   if (viewMode.value === 'rules') fetchRules()
@@ -614,6 +1116,17 @@ watch(() => settingForm.value.case_key, (key) => {
     settingForm.value.points = rule.points ?? 0
   }
 }, { immediate: false })
+watch([
+  viewMode,
+  historyIsManager,
+  historyNextCursor,
+  adminSubjectsNextCursor,
+  selectedSubjectId,
+  historyLoadingMore,
+  adminSubjectsLoadingMore,
+], () => {
+  if (viewMode.value === 'history') refreshHistoryObservers()
+})
 </script>
 
 <style scoped>
@@ -626,6 +1139,9 @@ watch(() => settingForm.value.case_key, (key) => {
   color: #1a1a1a;
   background: #ffffff;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 16px;
   border-radius: 12px;
   /* border: 1px solid #e5e7eb; */
@@ -697,6 +1213,13 @@ watch(() => settingForm.value.case_key, (key) => {
   flex-wrap: wrap;
 }
 
+.workpoint-top-users__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .workpoint-top-users__header .workpoint-top-users__zone-row {
   margin-bottom: 0;
 }
@@ -721,6 +1244,11 @@ watch(() => settingForm.value.case_key, (key) => {
 
 .workpoint-top-users__rule-page {
   margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .workpoint-top-users__rule-header {
@@ -729,6 +1257,21 @@ watch(() => settingForm.value.case_key, (key) => {
   gap: 12px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.workpoint-top-users__rule-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+.workpoint-top-users__loading--rules {
+  margin: 24px 0;
 }
 
 .workpoint-top-users__rule-btn--setting,
@@ -1518,6 +2061,10 @@ watch(() => settingForm.value.case_key, (key) => {
 }
 
 /* Rule page game style (dark) */
+.workpoint-top-users--dark .workpoint-top-users__rule-scroll {
+  scrollbar-color: rgba(148, 163, 184, 0.45) rgba(255, 255, 255, 0.06);
+}
+
 .workpoint-top-users--dark .workpoint-top-users__rule-title {
   color: rgba(0, 242, 255, 0.95);
   font-family: 'Orbitron', sans-serif;
@@ -1573,6 +2120,362 @@ watch(() => settingForm.value.case_key, (key) => {
   color: rgba(138, 43, 226, 0.9);
 }
 
+.workpoint-top-users__history {
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.workpoint-top-users__history-split {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 16px;
+  align-items: start;
+  height: 100%;
+  min-height: 0;
+}
+
+.workpoint-top-users__history-aside {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workpoint-top-users__history-aside-title {
+  margin: 0 0 10px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.workpoint-top-users__user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workpoint-top-users__user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.workpoint-top-users__user-item:hover {
+  background: #f3f4f6;
+}
+
+.workpoint-top-users__user-item--active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.workpoint-top-users__user-name {
+  font-weight: 600;
+  color: #1a1a1a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workpoint-top-users__user-meta {
+  font-size: 11px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.workpoint-top-users__history-main {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workpoint-top-users__history-my {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workpoint-top-users__history-detail-title {
+  margin: 0 0 14px 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #111827;
+}
+
+.workpoint-top-users__history-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.workpoint-top-users__stat-row {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workpoint-top-users__stat-row span:first-child {
+  font-weight: 700;
+  color: #111827;
+}
+
+.workpoint-top-users__stat-row span:last-child {
+  color: #374151;
+}
+
+.workpoint-top-users__history-subtitle {
+  margin: 14px 0 10px 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #111827;
+}
+
+.workpoint-top-users__today-rules {
+  list-style: none;
+  margin: 0 0 12px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workpoint-top-users__today-rule {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 10px;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.workpoint-top-users__today-rule:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.workpoint-top-users__history-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workpoint-top-users__history-log-row {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 8px;
+  font-size: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  align-items: center;
+  background: #ffffff;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.workpoint-top-users__history-log-row:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workpoint-top-users__history-log-pts {
+  font-weight: 700;
+  color: #0d7a0d;
+  font-size: 13px;
+}
+
+.workpoint-top-users__history-log-time {
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.workpoint-top-users__history-log-date {
+  font-weight: 600;
+}
+
+.workpoint-top-users__history-log-clock {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.workpoint-top-users__history-log-key {
+  color: #111827;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workpoint-top-users__history-loadmore {
+  margin-top: 12px;
+}
+
+.workpoint-top-users__infinite-sentinel {
+  width: 100%;
+  height: 2px;
+}
+
+.workpoint-top-users__skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.workpoint-top-users__skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #eef2f7;
+}
+
+.workpoint-top-users__skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.65) 50%, rgba(255, 255, 255, 0) 100%);
+  animation: workpoint-skeleton-wave 1.2s ease-in-out infinite;
+}
+
+.workpoint-top-users__skeleton--user {
+  height: 42px;
+}
+
+.workpoint-top-users__skeleton--log {
+  height: 48px;
+}
+
+@keyframes workpoint-skeleton-wave {
+  to { transform: translateX(100%); }
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-aside {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-main {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-my {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__user-item:hover {
+  background: rgba(0, 242, 255, 0.06);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__user-item--active {
+  background: rgba(0, 242, 255, 0.1);
+  border-color: rgba(0, 242, 255, 0.35);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__today-rule {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__today-rule:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-log-row {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__skeleton {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__skeleton::after {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(0, 242, 255, 0.25) 50%, rgba(255, 255, 255, 0) 100%);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-log-row:hover {
+  background: rgba(0, 242, 255, 0.05);
+  border-color: rgba(0, 242, 255, 0.25);
+  box-shadow: none;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-detail-title,
+.workpoint-top-users--dark .workpoint-top-users__history-subtitle,
+.workpoint-top-users--dark .workpoint-top-users__history-aside-title,
+.workpoint-top-users--dark .workpoint-top-users__user-name,
+.workpoint-top-users--dark .workpoint-top-users__history-log-key {
+  color: #e6eef6;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-log-time,
+.workpoint-top-users--dark .workpoint-top-users__user-meta,
+.workpoint-top-users--dark .workpoint-top-users__history-stats {
+  color: #94a3b8;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__history-stats {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__stat-row span:first-child {
+  color: #cbd5e1;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__stat-row span:last-child {
+  color: #e2e8f0;
+}
+
 @media (max-width: 640px) {
   .workpoint-top-users__podium {
     grid-template-columns: 1fr;
@@ -1581,6 +2484,22 @@ watch(() => settingForm.value.case_key, (key) => {
     grid-template-columns: 28px 1fr 48px minmax(50px, 1fr) auto;
     gap: 8px;
     padding: 10px 12px;
+  }
+  .workpoint-top-users__history-split {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .workpoint-top-users__history-aside,
+  .workpoint-top-users__history-main,
+  .workpoint-top-users__history-my {
+    height: auto;
+    max-height: 46vh;
+  }
+  .workpoint-top-users__history-log-row {
+    grid-template-columns: 1fr auto;
+  }
+  .workpoint-top-users__history-log-time {
+    grid-column: 1 / -1;
   }
 }
 </style>

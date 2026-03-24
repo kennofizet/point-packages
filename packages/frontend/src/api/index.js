@@ -60,5 +60,26 @@ export function createWorkpointApi(coreUrl, workpointUrl, token) {
     saveRule: (payload) => workpointApi.post('/rules/save', payload),
     /** Reset zone rules to default (manager). Body: zone_id */
     resetZoneRules: (zoneId) => workpointApi.post('/rules/reset', { zone_id: zoneId }),
+    /** Current user summary: totals + ranks + today_by_rule + isManager */
+    getHistoryMeSummary: (language = 'vi') =>
+      workpointApi.get('/history/me/summary', { params: { language } }),
+    /** Current user logs only (cursor pagination). Params: period, cursor (optional record id), language */
+    getHistoryMeLogs: (period = 'week', cursor = null, language = 'vi') =>
+      workpointApi.get('/history/me/logs', {
+        params: { period, ...(cursor != null && cursor !== '' ? { cursor } : {}), language },
+      }),
+    /** One user summary (manager or self). */
+    getHistoryUserSummary: (subjectId, language = 'vi') =>
+      workpointApi.get(`/history/user/${subjectId}/summary`, { params: { language } }),
+    /** One user logs only (cursor pagination). */
+    getHistoryUserLogs: (subjectId, period = 'week', cursor = null, language = 'vi') =>
+      workpointApi.get(`/history/user/${subjectId}/logs`, {
+        params: { period, ...(cursor != null && cursor !== '' ? { cursor } : {}), language },
+      }),
+    /** Cursor-paginated users in zone (manager only). */
+    getAdminSubjects: (cursor = null) =>
+      workpointApi.get('/admin/subjects', {
+        params: cursor != null && cursor !== '' ? { cursor } : {},
+      }),
   }
 }

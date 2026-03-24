@@ -21,6 +21,13 @@ class WorkpointPeriodTotal extends Model
         'total_points',
     ];
 
+    protected $hidden = [
+        'subject_type',
+        'subject_id',
+        'period_type',
+        'period_key'
+    ];
+
     protected $casts = [
         'total_points' => 'integer',
     ];
