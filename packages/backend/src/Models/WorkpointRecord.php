@@ -13,6 +13,7 @@ class WorkpointRecord extends BaseModel
 
     protected $fillable = [
         'zone_id',
+        'user_id',
         'subject_type',
         'subject_id',
         'target_type',
@@ -23,6 +24,7 @@ class WorkpointRecord extends BaseModel
     ];
 
     protected $hidden = [
+        'user_id',
         'subject_type',
         'subject_id',
         'target_type',
@@ -32,6 +34,7 @@ class WorkpointRecord extends BaseModel
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
         'payload' => 'array',
     ];
 
@@ -47,6 +50,13 @@ class WorkpointRecord extends BaseModel
     public static function getTableName(): string
     {
         return config('workpoint.table', 'workpoint_records');
+    }
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('workpoint_user_id_not_null_scope', static function (Builder $builder): void {
+            $builder->whereNotNull('user_id');
+        });
     }
 
     public function subject(): MorphTo

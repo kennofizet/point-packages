@@ -14,8 +14,12 @@ class PeriodTotalsSync
 {
     public function syncRecord(WorkpointRecord $record): void
     {
-        $subjectType = $record->subject_type;
-        $subjectId = $record->subject_id;
+        $userId = $record->user_id;
+        if ($userId === null) {
+            return;
+        }
+        $entityType = $record->subject_type;
+        $entityId = $record->subject_id;
         $delta = (int) $record->points_delta;
         if ($delta === 0) {
             return;
@@ -24,17 +28,20 @@ class PeriodTotalsSync
         foreach (PeriodHelper::PERIODS_ALL as $periodType) {
             $periodKey = PeriodHelper::periodKey($periodType);
             // Match row by the record's zone (explicit + no global scope: safe in queue / multi-zone).
-            $row = WorkpointPeriodTotal::where('subject_type', $subjectType)
-                ->where('subject_id', $subjectId)
+            $row = WorkpointPeriodTotal::withoutGlobalScopes()
+                ->where('zone_id', $record->zone_id)
+                ->where('user_id', $userId)
                 ->where('period_type', $periodType)
                 ->where('period_key', $periodKey)
                 ->first();
             if ($row) {
                 $row->increment('total_points', $delta);
             } else {
-                WorkpointPeriodTotal::create([
-                    'subject_type' => $subjectType,
-                    'subject_id' => $subjectId,
+                WorkpointPeriodTotal::withoutGlobalScopes()->create([
+                    'zone_id' => $record->zone_id,
+                    'user_id' => $userId,
+                    'subject_type' => $entityType,
+                    'subject_id' => $entityId,
                     'period_type' => $periodType,
                     'period_key' => $periodKey,
                     'total_points' => $delta,

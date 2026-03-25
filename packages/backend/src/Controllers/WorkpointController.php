@@ -129,10 +129,8 @@ class WorkpointController extends Controller
         $lang = $this->parseLanguage($request);
 
         $userId = self::currentUserId();
-        $subjectClass = $this->workpointService->getSubjectClass();
 
         $data = $this->workpointService->buildUserHistorySummary(
-            $subjectClass,
             $userId,
             $lang
         );
@@ -156,9 +154,7 @@ class WorkpointController extends Controller
         $lang = $this->parseLanguage($request);
 
         $userId = self::currentUserId();
-        $subjectClass = $this->workpointService->getSubjectClass();
         $data = $this->workpointService->buildUserHistoryLogs(
-            $subjectClass,
             $userId,
             $period,
             $cursorId,
@@ -171,7 +167,7 @@ class WorkpointController extends Controller
     /**
      * Summary for one user (self or manager).
      */
-    public function historyUserSummary(Request $request, int $subjectId): JsonResponse
+    public function historyUserSummary(Request $request, int $userId): JsonResponse
     {
         $deny = $this->authorizeHistoryAccess();
         if ($deny !== null) {
@@ -179,10 +175,8 @@ class WorkpointController extends Controller
         }
 
         $lang = $this->parseLanguage($request);
-        $subjectClass = $this->workpointService->getSubjectClass();
         $data = $this->workpointService->buildUserHistorySummary(
-            $subjectClass,
-            $subjectId,
+            $userId,
             $lang
         );
 
@@ -192,7 +186,7 @@ class WorkpointController extends Controller
     /**
      * Paginated logs for one user (self or manager).
      */
-    public function historyUserLogs(Request $request, int $subjectId): JsonResponse
+    public function historyUserLogs(Request $request, int $userId): JsonResponse
     {
         $deny = $this->authorizeHistoryAccess();
         if ($deny !== null) {
@@ -207,10 +201,8 @@ class WorkpointController extends Controller
         $cursorId = $cursorRaw !== null && $cursorRaw !== '' ? (int) $cursorRaw : null;
         $lang = $this->parseLanguage($request);
 
-        $subjectClass = $this->workpointService->getSubjectClass();
         $data = $this->workpointService->buildUserHistoryLogs(
-            $subjectClass,
-            $subjectId,
+            $userId,
             $period,
             $cursorId,
             $lang
@@ -222,12 +214,12 @@ class WorkpointController extends Controller
     /**
      * Cursor-paginated list of users who have workpoints in the current zone (manager).
      */
-    public function adminSubjects(Request $request): JsonResponse
+    public function adminMembers(Request $request): JsonResponse
     {
         $cursor = $request->input('cursor');
         $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
 
-        $data = $this->workpointService->listSubjectsInZoneCursor($cursor);
+        $data = $this->workpointService->listMembersInZoneCursor($cursor);
 
         return $this->apiResponseWithContext($data);
     }

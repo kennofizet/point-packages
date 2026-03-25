@@ -8,16 +8,29 @@ use Kennofizet\Workpoint\Models\WorkpointRecord;
 class FirstTime implements CheckRuleInterface
 {
     public function allowed(
-        object $subject,
+        object $user,
         ?object $target,
         string $actionKey,
         array $payload,
         array $caseConfig,
+        ?int $zoneId = null
     ): bool {
-        return !WorkpointRecord::query()
-            ->where('subject_type', $subject::class)
-            ->where('subject_id', $subject->getKey())
-            ->where('action_key', $actionKey)
-            ->exists();
+        $userId = $caseConfig['user_id'] ?? null;
+        if (!is_int($userId) || $userId <= 0) {
+            return false;
+        }
+
+        $query = WorkpointRecord::query()
+            ->where('user_id', $userId)
+            ->where('action_key', $actionKey);
+
+        if ($zoneId !== null) {
+            $query = WorkpointRecord::withoutGlobalScopes()
+                ->where('zone_id', $zoneId)
+                ->where('user_id', $userId)
+                ->where('action_key', $actionKey);
+        }
+
+        return !$query->exists();
     }
 }

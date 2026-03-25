@@ -1,6 +1,6 @@
 # Workpoint Backend
 
-Laravel package to **record workpoints** (points) for subjects (e.g. users) with configurable rules. Zone-scoped via **packages-core**. Use the `HasWorkpointRecords` trait to record points and expose top ranking + rules APIs.
+Laravel package to **record workpoints** (points) for users with configurable rules. Zone-scoped via **packages-core**. Use the `HasWorkpointRecords` trait to record points and expose top ranking + rules APIs.
 
 ---
 
@@ -32,11 +32,13 @@ WORKPOINT_PERIOD_TOTALS_TABLE=workpoint_period_totals
 WORKPOINT_ZONE_CASES_TABLE=workpoint_zone_cases
 WORKPOINT_API_PREFIX=workpoint
 WORKPOINT_USE_PERIOD_TOTALS_TABLE=true
-# Polymorphic subject model (must match HasWorkpointRecords model class)
-WORKPOINT_SUBJECT_CLASS=App\\Models\\User
 WORKPOINT_HISTORY_PER_PAGE=30
-WORKPOINT_ADMIN_SUBJECTS_PER_PAGE=30
+WORKPOINT_ADMIN_MEMBERS_PER_PAGE=30
 ```
+
+User display column comes from `packages-core` config:
+- `packages-core.user_col_name` (default: `name`)
+- `packages-core.table_user` (user table used by core)
 
 ---
 
@@ -66,11 +68,22 @@ class User extends Authenticatable
 $user->recordWorkpoint('app_first_visit_day');                    // no target
 $user->recordWorkpoint('task_completed_on_time', $task);          // with target
 $user->recordWorkpoint('task_accepted_sla', $task, ['sla' => 24]); // with payload
+
+// Optional zone list (multi-zone record). Invalid/non-member zones are skipped silently.
+$user->recordWorkpoint('task_completed_on_time', $task, [], [1, 2, 3]);
+
+// Null zone list (or [null]) means: record across all zones that belong to this user.
+$user->recordWorkpoint('app_first_visit_day', null, [], null);
 ```
 
-Returns `WorkpointRecord` or `null` if the rule disallows (e.g. already earned for that target/period).
+Returns `WorkpointRecord` or `null` if skipped/disallowed.
 
-**3. Check if a record already exists** (current zone; same `action_key` / target shape as when recording — does **not** re-run rule logic, only looks for a row):
+`workpoint_records` and `workpoint_period_totals` now store `user_id` and all checks/queries use `user_id` as the primary key.
+`subject_type`/`subject_id` stay for polymorphic relation metadata only.
+
+When request context has `currentUserId`, backend always uses that user first. If `currentUserZoneId` exists, it records only in that zone; otherwise it uses all zones of that current user. Only when `currentUserId` is null will backend use passed `userId` + `zoneIds`.
+
+**3. Check if a record already exists** (by `user_id`; same `action_key` / target shape as when recording — does **not** re-run rule logic, only looks for a row):
 
 ```php
 use App\Constants\ProjectConstant;
@@ -82,15 +95,10 @@ if ($user->hasWorkpointRecord(ProjectConstant::$workpointCase['project_confirm_a
 if ($user->hasWorkpointRecord('app_first_visit_day')) {
     // no-target case: matches rows with null target
 }
+
+// Optional: explicit zoneIds and/or userId
+$user->hasWorkpointRecord('task_completed_on_time', $task, [1, 2], 123);
 ```
-
-**4. Query records:**
-
-```php
-$user->workpointRecords;
-$user->getWorkpointRecordsByPeriod('week');
-```
-
 ---
 
 ## API
@@ -99,13 +107,13 @@ All under `{packages-core.api_prefix}/{workpoint.api_prefix}/` (e.g. `api/knf/wo
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `top?period=day\|week\|month\|year&limit=10` | Top subjects by points in period (zone-scoped). |
+| GET | `top?period=day\|week\|month\|year&limit=10` | Top users by points in period (zone-scoped). |
 | GET | `rules?language=vi\|en` | Merged rules (default + zone overrides). Returns `rules`, `language`, `isManager`. |
 | POST | `rules/save` | Save one zone case override (manager). Zone from `X-Knf-Zone-Id`. Body: `case_key`, `points`, `check`, `period?`, `cap?`, `descriptions?`. |
 | POST | `rules/reset` | Reset zone rules to default for the current zone (manager). Zone from `X-Knf-Zone-Id`; no body required. |
 | GET | `history/me?period=day\|week\|month\|year&cursor=&language=vi\|en` | Current user: point log in period (cursor = last record `id` for “load more”), totals, ranks, `today_by_rule`, `isManager`. |
-| GET | `history/user/{subjectId}?period=&cursor=&language=` | Same payload for one user (self always; others only if manager for zone / server). |
-| GET | `admin/subjects?cursor=` | **Manager only.** Cursor-paginated users who have workpoints in the zone (`next_cursor` is base64 JSON). |
+| GET | `history/user/{userId}?period=&cursor=&language=` | Same payload for one user (self always; others only if manager for zone / server). |
+| GET | `admin/members?cursor=` | **Manager only.** Cursor-paginated users who have workpoints in the zone (`next_cursor` is base64 JSON). |
 
 History summary responses include **`today_by_rule`**: per rule, `earned` is points earned today; **`max_points`** is the max total points for that rule when the check is capped — for `count_cap_per_period` it is **`points × cap`** (cap = max awards per period); for `first_time` / `first_time_per_period` / `first_time_per_target` it is **`points`** (one award). **`max_points`** is `null` when unlimited (`none` or no cap on count rules).
 

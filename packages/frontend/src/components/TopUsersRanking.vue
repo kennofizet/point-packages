@@ -188,39 +188,39 @@
         <div class="workpoint-top-users__history-split">
           <aside ref="userListScrollRef" class="workpoint-top-users__history-aside">
             <h3 class="workpoint-top-users__history-aside-title">{{ t.usersListTitle }}</h3>
-            <div v-if="adminSubjectsLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
+            <div v-if="adminMembersLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
             <ul v-else class="workpoint-top-users__user-list">
               <li
-                v-for="u in adminSubjects"
-                :key="'u-' + u.subject_id"
+                v-for="u in adminMembers"
+                :key="'u-' + u.user_id"
                 class="workpoint-top-users__user-item"
-                :class="{ 'workpoint-top-users__user-item--active': selectedSubjectId === u.subject_id }"
+                :class="{ 'workpoint-top-users__user-item--active': selectedUserId === u.user_id }"
                 @click="selectManagerUser(u)"
               >
                 <span class="workpoint-top-users__user-name">
-                  <slot name="subject" :item="u" :rank="0">
-                    {{ u.subject_name || t.userLabel(u.subject_id) }}
+                  <slot name="user" :item="u" :rank="0">
+                    {{ u.name || t.userLabel(u.user_id) }}
                   </slot>
                 </span>
-                <span class="workpoint-top-users__user-meta">#{{ u.subject_id }}</span>
+                <span class="workpoint-top-users__user-meta">#{{ u.user_id }}</span>
               </li>
             </ul>
-            <div v-if="adminSubjectsLoadingMore" class="workpoint-top-users__skeleton-list">
+            <div v-if="adminMembersLoadingMore" class="workpoint-top-users__skeleton-list">
               <div v-for="n in 4" :key="'user-sk-' + n" class="workpoint-top-users__skeleton workpoint-top-users__skeleton--user"></div>
             </div>
             <div
-              v-if="adminSubjectsNextCursor"
+              v-if="adminMembersNextCursor"
               ref="userListSentinelRef"
               class="workpoint-top-users__infinite-sentinel"
               aria-hidden="true"
             ></div>
-            <p v-if="!adminSubjectsLoading && !adminSubjects.length" class="workpoint-top-users__empty">{{ t.noData }}</p>
+            <p v-if="!adminMembersLoading && !adminMembers.length" class="workpoint-top-users__empty">{{ t.noData }}</p>
           </aside>
           <div ref="historyLogScrollRef" class="workpoint-top-users__history-main">
-            <template v-if="selectedSubjectId != null">
+            <template v-if="selectedUserId != null">
               <div v-if="detailLoading" class="workpoint-top-users__loading">{{ t.loading }}</div>
               <template v-else>
-                <h3 class="workpoint-top-users__history-detail-title">{{ t.detailForUser }} #{{ selectedSubjectId }}</h3>
+                <h3 class="workpoint-top-users__history-detail-title">{{ t.detailForUser }} #{{ selectedUserId }}</h3>
                 <div class="workpoint-top-users__history-stats">
                   <div class="workpoint-top-users__stat-row">
                     <span>{{ t.totalsTitle }}</span>
@@ -322,7 +322,7 @@
         <div v-if="effectiveDarkMode && items.length >= 3" class="workpoint-top-users__podium">
           <div
             v-for="(item, index) in items.slice(0, 3)"
-            :key="`podium-${item.subject_type}-${item.subject_id}`"
+            :key="`podium-${item.user_id}`"
             class="workpoint-top-users__podium-card"
             :class="[
               index === 0 && 'workpoint-top-users__podium-card--gold',
@@ -331,9 +331,9 @@
             ]"
           >
             <span class="workpoint-top-users__podium-rank" :class="{ 'workpoint-top-users__podium-rank--first': index === 0 }">#{{ index + 1 }}</span>
-            <span class="workpoint-top-users__podium-subject">
-              <slot name="subject" :item="item" :rank="index + 1">
-                {{ t.userLabel(item.subject_name || item.subject_id) }}
+            <span class="workpoint-top-users__podium-user">
+              <slot name="user" :item="item" :rank="index + 1">
+                {{ t.userLabel(item.name || item.user_id) }}
               </slot>
             </span>
             <span class="workpoint-top-users__podium-xp">{{ item.total_points }} {{ t.pts }}</span>
@@ -344,13 +344,13 @@
         <ul class="workpoint-top-users__list">
           <li
             v-for="(item, index) in listItems"
-            :key="`${item.subject_type}-${item.subject_id}`"
+            :key="`${item.user_id}`"
             class="workpoint-top-users__item"
           >
             <span class="workpoint-top-users__rank">#{{ listItemRank(index) }}</span>
-            <span class="workpoint-top-users__subject">
-              <slot name="subject" :item="item" :rank="index + 1">
-                {{ t.userLabel(item.subject_name || item.subject_id) }}
+            <span class="workpoint-top-users__user">
+              <slot name="user" :item="item" :rank="index + 1">
+                {{ t.userLabel(item.name || item.user_id) }}
               </slot>
             </span>
             <template v-if="effectiveDarkMode">
@@ -544,11 +544,11 @@ const todayByRuleList = computed(() => {
 const historyNextCursor = ref(null)
 const historyLoadingMore = ref(false)
 
-const adminSubjects = ref([])
-const adminSubjectsLoading = ref(false)
-const adminSubjectsLoadingMore = ref(false)
-const adminSubjectsNextCursor = ref(null)
-const selectedSubjectId = ref(null)
+const adminMembers = ref([])
+const adminMembersLoading = ref(false)
+const adminMembersLoadingMore = ref(false)
+const adminMembersNextCursor = ref(null)
+const selectedUserId = ref(null)
 const detailLoading = ref(false)
 
 // Infinite scroll sentinels
@@ -889,7 +889,7 @@ async function refreshHistoryObservers() {
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            loadMoreAdminSubjects()
+            loadMoreAdminMembers()
           }
         }
       },
@@ -938,11 +938,11 @@ async function loadHistoryEntry() {
     isManager.value = historyIsManager.value
 
     if (historyIsManager.value) {
-      adminSubjects.value = []
-      adminSubjectsNextCursor.value = null
-      selectedSubjectId.value = null
+      adminMembers.value = []
+      adminMembersNextCursor.value = null
+      selectedUserId.value = null
       historyRows.value = []
-      await loadAdminSubjects(true)
+      await loadAdminMembers(true)
     } else {
       await fetchHistoryMeLogs(true)
     }
@@ -988,46 +988,46 @@ async function loadMoreHistoryMe() {
   }
 }
 
-async function loadAdminSubjects(reset) {
-  if (!workpointApi?.getAdminSubjects) return
-  if (!reset && (!adminSubjectsNextCursor.value || adminSubjectsLoadingMore.value)) return
+async function loadAdminMembers(reset) {
+  if (!workpointApi?.getAdminMembers) return
+  if (!reset && (!adminMembersNextCursor.value || adminMembersLoadingMore.value)) return
   if (reset) {
-    adminSubjectsLoading.value = true
+    adminMembersLoading.value = true
   } else {
-    adminSubjectsLoadingMore.value = true
+    adminMembersLoadingMore.value = true
   }
   try {
-    const res = await workpointApi.getAdminSubjects(reset ? null : adminSubjectsNextCursor.value)
+    const res = await workpointApi.getAdminMembers(reset ? null : adminMembersNextCursor.value)
     const data = res?.data
     const payload = data?.datas ?? data?.data ?? data
     const items = payload?.items || []
-    adminSubjects.value = reset ? items : [...adminSubjects.value, ...items]
-    adminSubjectsNextCursor.value = payload?.next_cursor ?? null
+    adminMembers.value = reset ? items : [...adminMembers.value, ...items]
+    adminMembersNextCursor.value = payload?.next_cursor ?? null
   } catch (_) {
-    if (reset) adminSubjects.value = []
+    if (reset) adminMembers.value = []
   } finally {
-    adminSubjectsLoading.value = false
-    adminSubjectsLoadingMore.value = false
+    adminMembersLoading.value = false
+    adminMembersLoadingMore.value = false
     refreshHistoryObservers()
   }
 }
 
-function loadMoreAdminSubjects() {
-  loadAdminSubjects(false)
+function loadMoreAdminMembers() {
+  loadAdminMembers(false)
 }
 
 async function selectManagerUser(u) {
-  const id = u.subject_id
+  const id = u.user_id
   if (id == null) return
-  selectedSubjectId.value = id
+  selectedUserId.value = id
   await loadHistoryUserSummary(id)
   await loadHistoryUserLogs(id, true)
 }
 
-async function loadHistoryUserSummary(subjectId) {
+async function loadHistoryUserSummary(userId) {
   if (!workpointApi?.getHistoryUserSummary) return
   try {
-    const res = await workpointApi.getHistoryUserSummary(subjectId, effectiveLanguage.value)
+    const res = await workpointApi.getHistoryUserSummary(userId, effectiveLanguage.value)
     const data = res?.data
     const payload = data?.datas ?? data?.data ?? data
     parseHistorySummaryPayload(payload)
@@ -1036,7 +1036,7 @@ async function loadHistoryUserSummary(subjectId) {
   }
 }
 
-async function loadHistoryUserLogs(subjectId, reset) {
+async function loadHistoryUserLogs(userId, reset) {
   if (!workpointApi?.getHistoryUserLogs) return
   if (!reset && (!historyNextCursor.value || historyLoadingMore.value)) return
   // Full-panel loading only when switching user / period / first open — not when infinite-scroll loads more.
@@ -1047,7 +1047,7 @@ async function loadHistoryUserLogs(subjectId, reset) {
   }
   try {
     const cursor = reset ? null : historyNextCursor.value
-    const res = await workpointApi.getHistoryUserLogs(subjectId, historyPeriod.value, cursor, effectiveLanguage.value)
+    const res = await workpointApi.getHistoryUserLogs(userId, historyPeriod.value, cursor, effectiveLanguage.value)
     const data = res?.data
     const payload = data?.datas ?? data?.data ?? data
     parseHistoryLogsPayload(payload)
@@ -1062,15 +1062,15 @@ async function loadHistoryUserLogs(subjectId, reset) {
 }
 
 async function loadMoreHistoryUser() {
-  if (selectedSubjectId.value == null || historyLoadingMore.value) return
-  await loadHistoryUserLogs(selectedSubjectId.value, false)
+  if (selectedUserId.value == null || historyLoadingMore.value) return
+  await loadHistoryUserLogs(selectedUserId.value, false)
 }
 
 async function selectHistoryPeriod(p) {
   historyPeriod.value = p
   historyNextCursor.value = null
-  if (historyIsManager.value && selectedSubjectId.value != null) {
-    await loadHistoryUserLogs(selectedSubjectId.value, true)
+  if (historyIsManager.value && selectedUserId.value != null) {
+    await loadHistoryUserLogs(selectedUserId.value, true)
   } else if (!historyIsManager.value) {
     historyLoading.value = true
     try {
@@ -1117,10 +1117,10 @@ watch([
   viewMode,
   historyIsManager,
   historyNextCursor,
-  adminSubjectsNextCursor,
-  selectedSubjectId,
+  adminMembersNextCursor,
+  selectedUserId,
   historyLoadingMore,
-  adminSubjectsLoadingMore,
+  adminMembersLoadingMore,
 ], () => {
   if (viewMode.value === 'history') refreshHistoryObservers()
 })
@@ -1685,7 +1685,7 @@ watch([
   color: #6b7280;
 }
 
-.workpoint-top-users__subject {
+.workpoint-top-users__user {
   flex: 1;
 }
 
@@ -1964,7 +1964,7 @@ watch([
   font-size: 1.5rem;
 }
 
-.workpoint-top-users__podium-subject {
+.workpoint-top-users__podium-user {
   font-weight: 600;
   font-size: 0.85rem;
   color: #e6eef6;

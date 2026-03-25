@@ -10,25 +10,38 @@ class CountCapPerPeriod implements CheckRuleInterface
 {
     /** @see FirstTime */
     public function allowed(
-        object $subject,
+        object $user,
         ?object $target,
         string $actionKey,
         array $payload,
         array $caseConfig,
+        ?int $zoneId = null
     ): bool {
         $period = $caseConfig['period'] ?? PeriodHelper::PERIOD_DAY;
         $cap = (int) ($caseConfig['cap'] ?? 0);
+        $userId = $caseConfig['user_id'] ?? null;
+        if (!is_int($userId) || $userId <= 0) {
+            return false;
+        }
         if ($cap <= 0) {
             return true;
         }
 
         $start = PeriodHelper::start($period);
 
-        return WorkpointRecord::query()
-            ->where('subject_type', $subject::class)
-            ->where('subject_id', $subject->getKey())
+        $query = WorkpointRecord::query()
+            ->where('user_id', $userId)
             ->where('action_key', $actionKey)
-            ->where('created_at', '>=', $start)
-            ->count() < $cap;
+            ->where('created_at', '>=', $start);
+
+        if ($zoneId !== null) {
+            $query = WorkpointRecord::withoutGlobalScopes()
+                ->where('zone_id', $zoneId)
+                ->where('user_id', $userId)
+                ->where('action_key', $actionKey)
+                ->where('created_at', '>=', $start);
+        }
+
+        return $query->count() < $cap;
     }
 }

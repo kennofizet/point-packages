@@ -16,12 +16,12 @@ Route::prefix($prefix . '/' . $workpointPrefix)
         Route::get('rules', [WorkpointController::class, 'rules']);
         Route::get('history/me/summary', [WorkpointController::class, 'historyMeSummary']);
         Route::get('history/me/logs', [WorkpointController::class, 'historyMeLogs']);
-        Route::get('history/user/{subjectId}/summary', [WorkpointController::class, 'historyUserSummary']);
-        Route::get('history/user/{subjectId}/logs', [WorkpointController::class, 'historyUserLogs']);
+        Route::get('history/user/{userId}/summary', [WorkpointController::class, 'historyUserSummary']);
+        Route::get('history/user/{userId}/logs', [WorkpointController::class, 'historyUserLogs']);
 
         Route::middleware(['knf.core.manager'])->group(function () {
             Route::post('rules/save', [WorkpointController::class, 'saveRule']);
             Route::post('rules/reset', [WorkpointController::class, 'resetZoneRules']);
-            Route::get('admin/subjects', [WorkpointController::class, 'adminSubjects']);
+            Route::get('admin/members', [WorkpointController::class, 'adminMembers']);
         });
     });

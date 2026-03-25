@@ -7,11 +7,12 @@ use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
 class NoCheck implements CheckRuleInterface
 {
     public function allowed(
-        object $subject,
+        object $user,
         ?object $target,
         string $actionKey,
         array $payload,
         array $caseConfig,
+        ?int $zoneId = null
     ): bool {
         return true;
     }

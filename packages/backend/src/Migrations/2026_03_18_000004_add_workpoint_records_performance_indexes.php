@@ -10,13 +10,13 @@ return new class extends Migration {
         $tableName = config('workpoint.table', 'workpoint_records');
 
         Schema::table($tableName, function (Blueprint $table) {
-            // History query: zone + subject type/id + time range + keyset by id.
+            // History query: zone + relation type/id + time range + keyset by id.
             $table->index(
                 ['zone_id', 'subject_type', 'subject_id', 'created_at', 'id'],
                 'wp_rec_z_su_st_ca_id'
             );
 
-            // Subject list (manager) and rank query: latest/group by subject in period.
+            // Member list (manager) and rank query: latest/group by relation in period.
             $table->index(
                 ['zone_id', 'subject_type', 'created_at', 'subject_id'],
                 'wp_rec_z_st_ca_su'

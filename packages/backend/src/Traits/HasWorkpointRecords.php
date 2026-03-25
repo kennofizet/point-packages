@@ -2,34 +2,50 @@
 
 namespace Kennofizet\Workpoint\Traits;
 
+use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
+use Kennofizet\PackagesCore\Models\User;
 use Kennofizet\Workpoint\Models\WorkpointRecord;
-use Kennofizet\Workpoint\Support\PeriodHelper;
 use Kennofizet\Workpoint\WorkpointRecordService;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 trait HasWorkpointRecords
 {
     /**
-     * Record a workpoint for this subject.
+     * Record a workpoint for this user.
      *
      * @param  object|null  $target  Optional target (e.g. Task, Project).
+     * @param  array<int, int|null>|null  $zoneIds  Zone IDs to record for. Null (or containing null) means all zones of this user.
      * @return \Kennofizet\Workpoint\Models\WorkpointRecord|null  The created record or null if not allowed.
      */
-    public function recordWorkpoint(string $actionKey, object|null $target = null, array $payload = []): ?WorkpointRecord
+    public function recordWorkpoint(
+        string $actionKey,
+        object|null $target = null,
+        array $payload = [],
+        ?array $zoneIds = null,
+        ?int $userId = null
+    ): ?WorkpointRecord
     {
-        return app(WorkpointRecordService::class)->record($this, $actionKey, $target, $payload);
+        $service = app(WorkpointRecordService::class);
+        $resolvedUserId = $this->resolveWorkpointUserId($userId);
+        $resolvedZoneIds = $this->resolveWorkpointZoneIds($resolvedUserId, $zoneIds);
+
+        return $service->record($this, $actionKey, $target, $payload, $resolvedZoneIds, $resolvedUserId);
     }
 
     /**
-     * Whether this subject already has a stored workpoint row for the action (and optional target) in the current zone.
+     * Whether this user already has a stored workpoint row for the action (and optional target) in the current zone.
      * Does not evaluate rule checks — only presence of a record. Use before calling {@see recordWorkpoint} or for UI gates.
      *
      * @param  object|null  $target  Same as {@see recordWorkpoint}: e.g. project/task model for per-target keys; omit for global keys.
      */
-    public function hasWorkpointRecord(string $actionKey, object|null $target = null): bool
+    public function hasWorkpointRecord(string $actionKey, object|null $target = null, ?array $zoneIds = null, ?int $userId = null): bool
     {
-        $query = $this->workpointRecords()
+        $resolvedUserId = $this->resolveWorkpointUserId($userId);
+        if ($resolvedUserId === null || $resolvedUserId <= 0) {
+            return false;
+        }
+
+        $query = WorkpointRecord::query()
+            ->where('user_id', $resolvedUserId)
             ->where('action_key', $actionKey);
 
         if ($target === null) {
@@ -39,31 +55,100 @@ trait HasWorkpointRecords
                 ->where('target_id', $target->getKey());
         }
 
+        $resolvedZoneIds = $this->resolveWorkpointZoneIds($resolvedUserId, $zoneIds);
+        if ($resolvedZoneIds === []) {
+            return false;
+        }
+        if ($resolvedZoneIds !== []) {
+            $query->whereIn('zone_id', $resolvedZoneIds);
+        }
+
         return $query->exists();
     }
 
-    /**
-     * Workpoint records where this model is the subject.
-     */
-    public function workpointRecords(): MorphMany
+    private function resolveWorkpointUserId(?int $userId = null): ?int
     {
-        return $this->morphMany(WorkpointRecord::class, 'subject');
+        $id = BaseModelActions::currentUserId() ?? $userId;
+
+        return $id === null ? null : (int) $id;
     }
 
     /**
-     * Get workpoint records for this subject in the given period (day|week|month|year).
-     * Ordered by created_at descending.
-     *
-     * @return Collection<int, WorkpointRecord>
+     * @param  array<int, int|null>|null  $zoneIds
+     * @return array<int, int|null>
      */
-    public function getWorkpointRecordsByPeriod(string $period): Collection
+    private function resolveWorkpointZoneIds(?int $resolvedUserId, ?array $zoneIds): array
     {
-        if (!PeriodHelper::isValidPeriod($period)) {
-            return new Collection([]);
+        if ($resolvedUserId === null || $resolvedUserId <= 0) {
+            return [];
         }
-        return $this->workpointRecords()
-            ->inPeriod($period)
-            ->orderByDesc('created_at')
-            ->get();
+
+        $userZoneIds = $this->extractCurrentUserZoneIds($resolvedUserId);
+        if ($zoneIds === null || in_array(null, $zoneIds, true)) {
+            return array_map(static fn (int $id): ?int => $id, $userZoneIds);
+        }
+
+        $requested = [];
+        foreach ($zoneIds as $zoneId) {
+            if (is_int($zoneId) && $zoneId > 0) {
+                $requested[$zoneId] = $zoneId;
+            }
+        }
+        if ($requested === []) {
+            return [];
+        }
+        if ($userZoneIds === []) {
+            return [];
+        }
+
+        return array_values(array_map(
+            static fn (int $id): ?int => $id,
+            array_intersect(array_values($requested), $userZoneIds)
+        ));
+    }
+
+    /**
+     * Context zones from {@see BaseModelActions::currentUserZoneIds}, then user model zones when empty.
+     *
+     * @return array<int, int>
+     */
+    private function extractCurrentUserZoneIds(int $userId): array
+    {
+        if (method_exists(BaseModelActions::class, 'currentUserZoneIds')) {
+            if(BaseModelActions::currentUserZoneIds() !== []) {
+                return BaseModelActions::currentUserZoneIds();
+            }
+        }
+        
+
+        if ($userId <= 0) {
+            return [];
+        }
+
+        $userModel = User::query()->find($userId);
+        if (!is_object($userModel)) {
+            return [];
+        }
+
+        $zoneIds = [];
+
+        if (method_exists($userModel, 'zones')) {
+            try {
+                $zones = $userModel->zones;
+                if ($zones instanceof \Illuminate\Support\Collection) {
+                    $zoneIds = $zones->pluck('id')->filter()->map(static fn ($v): int => (int) $v)->all();
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        if ($zoneIds === [] && method_exists($userModel, 'zones')) {
+            try {
+                $zoneIds = $userModel->zones()->pluck('id')->map(static fn ($v): int => (int) $v)->all();
+            } catch (\Throwable) {
+            }
+        }
+
+        return array_values(array_unique(array_filter($zoneIds, static fn (int $id): bool => $id > 0)));
     }
 }

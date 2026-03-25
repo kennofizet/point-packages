@@ -69,16 +69,16 @@ export function createWorkpointApi(coreUrl, workpointUrl, token) {
         params: { period, ...(cursor != null && cursor !== '' ? { cursor } : {}), language },
       }),
     /** One user summary (manager or self). */
-    getHistoryUserSummary: (subjectId, language = 'vi') =>
-      workpointApi.get(`/history/user/${subjectId}/summary`, { params: { language } }),
+    getHistoryUserSummary: (userId, language = 'vi') =>
+      workpointApi.get(`/history/user/${userId}/summary`, { params: { language } }),
     /** One user logs only (cursor pagination). */
-    getHistoryUserLogs: (subjectId, period = 'week', cursor = null, language = 'vi') =>
-      workpointApi.get(`/history/user/${subjectId}/logs`, {
+    getHistoryUserLogs: (userId, period = 'week', cursor = null, language = 'vi') =>
+      workpointApi.get(`/history/user/${userId}/logs`, {
         params: { period, ...(cursor != null && cursor !== '' ? { cursor } : {}), language },
       }),
-    /** Cursor-paginated users in zone (manager only). */
-    getAdminSubjects: (cursor = null) =>
-      workpointApi.get('/admin/subjects', {
+    /** Cursor-paginated members in zone (manager only). */
+    getAdminMembers: (cursor = null) =>
+      workpointApi.get('/admin/members', {
         params: cursor != null && cursor !== '' ? { cursor } : {},
       }),
   }

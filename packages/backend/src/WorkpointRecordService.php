@@ -14,7 +14,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
-use Carbon\Carbon;
+use Kennofizet\PackagesCore\Models\User;
 
 class WorkpointRecordService
 {
@@ -27,34 +27,83 @@ class WorkpointRecordService
     ) {
     }
 
+    /**
+     * @param  object  $userEntity  Polymorphic user entity to persist and pass to rules/relations; queries use user_id only.
+     */
     public function record(
-        object $subject,
+        object $userEntity,
         string $actionKey,
         object|null $target = null,
-        array $payload = []
+        array $payload = [],
+        ?array $zoneIds = null,
+        ?int $userId = null,
     ): ?WorkpointRecord {
-        $caseConfig = $this->getCaseConfig($actionKey);
-        if ($caseConfig === null) {
+        if ($userId === null || $userId <= 0) {
             return null;
         }
 
+        $resolvedZoneIds = $zoneIds ?? [];
+        if ($resolvedZoneIds === []) {
+            return null;
+        }
+
+        $firstRecord = null;
+        foreach ($resolvedZoneIds as $zoneId) {
+            if (!is_int($zoneId) || $zoneId <= 0) {
+                continue;
+            }
+            $record = $this->recordInZone($userEntity, $userId, $actionKey, $target, $payload, $zoneId);
+            if ($record !== null && $firstRecord === null) {
+                $firstRecord = $record;
+            }
+        }
+
+        return $firstRecord;
+    }
+
+    /**
+     * @param  int|null  $zoneId  Explicit zone for record/check. Null keeps package-core default behavior.
+     */
+    private function recordInZone(
+        object $userEntity,
+        int $userId,
+        string $actionKey,
+        object|null $target,
+        array $payload,
+        ?int $zoneId
+    ): ?WorkpointRecord {
+        $caseConfig = $this->getCaseConfig($actionKey, $zoneId);
+        if ($caseConfig === null) {
+            return null;
+        }
+        $caseConfig['user_id'] = $userId;
+
         $checkName = $caseConfig['check'] ?? 'none';
         $rule = $this->resolveRule($checkName);
-        if ($rule === null || !$rule->allowed($subject, $target, $actionKey, $payload, $caseConfig)) {
+        if ($rule === null || !$rule->allowed($userEntity, $target, $actionKey, $payload, $caseConfig, $zoneId)) {
             return null;
         }
 
         $pointsDelta = (int) ($caseConfig['points'] ?? 0);
 
-        $record = WorkpointRecord::create([
-            'subject_type' => $subject::class,
-            'subject_id' => $subject->getKey(),
+        $record = WorkpointRecord::query()->create([
+            'user_id' => $userId,
+            'subject_type' => $userEntity::class,
+            'subject_id' => $userEntity->getKey(),
             'target_type' => $target ? $target::class : null,
             'target_id' => $target ? $target->getKey() : null,
             'action_key' => $actionKey,
             'points_delta' => $pointsDelta,
             'payload' => $payload ?: null,
+            'zone_id' => $zoneId,
         ]);
+
+        if ($zoneId !== null && (int) $record->zone_id !== $zoneId) {
+            WorkpointRecord::withoutGlobalScopes()
+                ->whereKey($record->getKey())
+                ->update(['zone_id' => $zoneId]);
+            $record = WorkpointRecord::withoutGlobalScopes()->find($record->getKey()) ?? $record;
+        }
 
         $record->load(['subject', 'target']);
 
@@ -69,29 +118,12 @@ class WorkpointRecordService
 
         return $record;
     }
-
+    
     /**
-     * Record by subject type and id (resolves subject from DB).
-     *
-     * @param  class-string  $subjectType  e.g. App\Models\User
-     * @param  int  $subjectId
-     * @return ForSubjectFluent
-     */
-    public function forSubject(string $subjectType, int $subjectId): ForSubjectFluent
-    {
-        return new ForSubjectFluent($this, $subjectType, $subjectId);
-    }
-
-    /**
-     * Get top subjects by total points in a period (scoped by current zone).
-     *
-     * @param  string  $period  'day'|'week'|'month'|'year'
-     * @param  int  $limit
-     * @return Collection<int, array{subject_type: string, subject_id: int, total_points: int}>
-     */
-    /**
-     * Get top subjects by total points in a period. Uses workpoint_period_totals when
+     * Get top users by total points in a period. Uses workpoint_period_totals when
      * use_period_totals_table is true (scalable); otherwise aggregates workpoint_records.
+     *
+     * @return Collection<int, array{user_id: int, total_points: int, name: string|null}>
      */
     public function getTopInPeriod(string $period, int $limit = 10): Collection
     {
@@ -106,7 +138,7 @@ class WorkpointRecordService
         $periodKey = PeriodHelper::periodKey($period);
 
         $rows = WorkpointPeriodTotal::query()
-            ->select('subject_type', 'subject_id', 'total_points')
+            ->select('user_id', 'total_points')
             ->where('period_type', $period)
             ->where('period_key', $periodKey)
             ->orderByDesc('total_points')
@@ -114,12 +146,11 @@ class WorkpointRecordService
             ->get();
 
         $items = $rows->map(fn ($row) => [
-            'subject_type' => $row->subject_type,
-            'subject_id' => (int) $row->subject_id,
+            'user_id' => (int) $row->user_id,
             'total_points' => (int) $row->total_points,
         ]);
 
-        return $this->addSubjectNames($items);
+        return $this->attachUserDisplayNames($items);
     }
 
     private function getTopInPeriodFromRecords(string $period, int $limit): Collection
@@ -129,65 +160,48 @@ class WorkpointRecordService
 
         $rows = WorkpointRecord::query()
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
-            ->selectRaw('subject_type, subject_id, SUM(points_delta) as total_points')
-            ->groupBy('subject_type', 'subject_id')
+            ->selectRaw('user_id, SUM(points_delta) as total_points')
+            ->groupBy('user_id')
             ->orderByDesc('total_points')
             ->limit($limit)
             ->get();
 
         $items = $rows->map(fn ($row) => [
-            'subject_type' => $row->subject_type,
-            'subject_id' => (int) $row->subject_id,
+            'user_id' => (int) $row->user_id,
             'total_points' => (int) $row->total_points,
         ]);
 
-        return $this->addSubjectNames($items);
+        return $this->attachUserDisplayNames($items);
     }
 
     /**
-     * When workpoint.subject_name_col is set, resolve subject by type/id and add subject_name to each item.
+     * Adds {@see User} display name; list payloads are keyed by user_id.
      *
-     * @param  Collection<int, array{subject_type: string, subject_id: int, total_points: int}>  $items
-     * @return Collection<int, array{subject_type: string, subject_id: int, total_points: int, subject_name?: string}>
+     * @param  Collection<int, array<string, mixed>>  $items  Must include user_id; may include total_points, last_at, etc.
+     * @return Collection<int, array<string, mixed>>
      */
-    private function addSubjectNames(Collection $items): Collection
+    private function attachUserDisplayNames(Collection $items): Collection
     {
-        $nameCol = $this->config->get('workpoint.subject_name_col');
-        if ($nameCol === null || $nameCol === '') {
+        $ids = $items->pluck('user_id')->unique()->values()->all();
+        if ($ids === []) {
             return $items;
         }
 
-        $byType = $items->groupBy('subject_type');
-
         $namesByKey = [];
-        foreach ($byType as $subjectType => $typeItems) {
-            if (! is_string($subjectType) || ! class_exists($subjectType)) {
-                continue;
+        try {
+            $user = new User;
+            $keyName = $user->getKeyName();
+            foreach (User::query()->whereIn($keyName, $ids)->get([$keyName, 'name']) as $model) {
+                $namesByKey[(string) $model->getKey()] = $model->name;
             }
-            $ids = $typeItems->pluck('subject_id')->unique()->values()->all();
-            if ($ids === []) {
-                continue;
-            }
-            try {
-                $keyName = $subjectType::query()->getModel()->getKeyName();
-                $models = $subjectType::query()->whereIn($keyName, $ids)->get([$keyName, $nameCol]);
-            } catch (\Throwable) {
-                continue;
-            }
-            foreach ($models as $model) {
-                $id = $model->getKey();
-                $namesByKey[$subjectType . '|' . $id] = $model->getAttribute($nameCol);
-            }
+        } catch (\Throwable) {
+            return $items;
         }
 
         return $items->map(function (array $item) use ($namesByKey) {
-            $key = $item['subject_type'] . '|' . $item['subject_id'];
-            if(isset($namesByKey[$key])){
-                $item['subject_name'] = $namesByKey[$key];
-                unset($item['subject_type']);
-            }else{
-                $item['subject_name'] = null;
-            }
+            $key = (string) $item['user_id'];
+            $item['name'] = $namesByKey[$key] ?? null;
+
             return $item;
         });
     }
@@ -197,13 +211,17 @@ class WorkpointRecordService
      *
      * @return array{points: int, check: string, period?: string, cap?: int, descriptions: array<string, string>}|null
      */
-    public function getCaseConfig(string $actionKey): ?array
+    public function getCaseConfig(string $actionKey, ?int $zoneId = null): ?array
     {
         $default = $this->config->get('workpoint_cases.' . $actionKey);
         if ($default === null || !is_array($default)) {
             return null;
         }
-        $override = WorkpointZoneCase::query()
+        if ($zoneId === null) {
+            return $default;
+        }
+        $override = WorkpointZoneCase::withoutGlobalScopes()
+            ->where('zone_id', $zoneId)
             ->where('case_key', $actionKey)
             ->first();
         if ($override === null) {
@@ -369,26 +387,14 @@ class WorkpointRecordService
     }
 
     /**
-     * Configured subject class (polymorphic subject_type), e.g. App\Models\User.
-     *
-     * @return class-string
-     */
-    public function getSubjectClass(): string
-    {
-        $class = $this->config->get('workpoint.subject_class', 'App\\Models\\User');
-        return is_string($class) && $class !== '' ? $class : 'App\\Models\\User';
-    }
-
-    /**
-     * Paginated workpoint rows for a subject in the current zone and time window (period).
+     * Paginated workpoint rows for a user in the current zone and time window (period).
      * Returns only fields required by frontend history UI.
      *
      * @param  array<string, string>  $caseNameByKey
      * @return array{items: array<int, array{id: int, case_key: string, case_name: string, points_delta: int, created_at: string|null}>, next_cursor: string|null}
      */
-    public function getHistoryForSubject(
-        string $subjectType,
-        int $subjectId,
+    public function getHistoryForUser(
+        int $userId,
         string $period,
         ?int $cursorId,
         array $caseNameByKey = [],
@@ -404,8 +410,7 @@ class WorkpointRecordService
         $table = WorkpointRecord::getTableName();
 
         $q = WorkpointRecord::query()
-            ->where($table . '.subject_type', $subjectType)
-            ->where($table . '.subject_id', $subjectId)
+            ->where($table . '.user_id', $userId)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
             ->orderByDesc($table . '.id');
 
@@ -446,24 +451,23 @@ class WorkpointRecordService
     }
 
     /**
-     * Leaderboard position (1-based) for one subject in the given period within current zone.
+     * Leaderboard position (1-based) for one user in the given period within current zone.
      */
-    public function getRankForSubjectInPeriod(string $subjectType, int $subjectId, string $period): ?int
+    public function getRankForUserInPeriod(int $userId, string $period): ?int
     {
         if (!PeriodHelper::isValidPeriod($period)) {
             return null;
         }
 
-        $myTotal = $this->getSubjectTotalInPeriod($subjectType, $subjectId, $period);
+        $myTotal = $this->getUserTotalInPeriod($userId, $period);
 
         $range = PeriodHelper::range($period);
         $table = WorkpointRecord::getTableName();
 
         $betterCount = WorkpointRecord::query()
-            ->where($table . '.subject_type', $subjectType)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
-            ->selectRaw($table . '.subject_id, SUM(' . $table . '.points_delta) as total_points')
-            ->groupBy($table . '.subject_id')
+            ->selectRaw($table . '.user_id, SUM(' . $table . '.points_delta) as total_points')
+            ->groupBy($table . '.user_id')
             ->havingRaw('SUM(' . $table . '.points_delta) > ?', [$myTotal])
             ->count();
 
@@ -471,9 +475,9 @@ class WorkpointRecordService
     }
 
     /**
-     * Total points for subject in period (current zone).
+     * Total points for user in period (current zone).
      */
-    public function getSubjectTotalInPeriod(string $subjectType, int $subjectId, string $period): int
+    public function getUserTotalInPeriod(int $userId, string $period): int
     {
         if (!PeriodHelper::isValidPeriod($period)) {
             return 0;
@@ -482,8 +486,7 @@ class WorkpointRecordService
         $table = WorkpointRecord::getTableName();
 
         return (int) WorkpointRecord::query()
-            ->where($table . '.subject_type', $subjectType)
-            ->where($table . '.subject_id', $subjectId)
+            ->where($table . '.user_id', $userId)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
             ->sum('points_delta');
     }
@@ -520,14 +523,13 @@ class WorkpointRecordService
      *
      * @return array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>
      */
-    public function getTodayProgressByRules(string $subjectType, int $subjectId, string $lang): array
+    public function getTodayProgressByRules(int $userId, string $lang): array
     {
         $range = PeriodHelper::range(PeriodHelper::PERIOD_DAY);
         $table = WorkpointRecord::getTableName();
 
         $earned = WorkpointRecord::query()
-            ->where($table . '.subject_type', $subjectType)
-            ->where($table . '.subject_id', $subjectId)
+            ->where($table . '.user_id', $userId)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
             ->selectRaw('action_key, SUM(points_delta) as total')
             ->groupBy('action_key')
@@ -553,62 +555,60 @@ class WorkpointRecordService
     }
 
     /**
-     * Distinct subjects (same subject_class) in zone with cursor pagination on (last_at, subject_id).
+     * Distinct users in zone with cursor pagination on (last_at, user_id).
      *
-     * @return array{items: array<int, array{subject_type: string, subject_id: int, last_at: string|null, subject_name?: string|null}>, next_cursor: string|null}
+     * @return array{items: array<int, array{user_id: int, last_at: string|null, name: string|null}>, next_cursor: string|null}
      */
-    public function listSubjectsInZoneCursor(?string $cursorEncoded, ?int $perPage = null): array
+    public function listMembersInZoneCursor(?string $cursorEncoded, ?int $perPage = null): array
     {
-        $perPage = $perPage ?? (int) $this->config->get('workpoint.admin_subjects_per_page', 30);
+        $perPage = $perPage ?? (int) $this->config->get('workpoint.admin_members_per_page', 30);
         $perPage = min(max($perPage, 1), 100);
 
-        $subjectClass = $this->getSubjectClass();
-
-        /** @var array{last_at: string, subject_id: int}|null $cursor */
+        /** @var array{last_at: string, user_id: int}|null $cursor */
         $cursor = null;
         if ($cursorEncoded !== null && $cursorEncoded !== '') {
             $decodedRaw = base64_decode($cursorEncoded, true);
             if ($decodedRaw !== false) {
                 $decoded = json_decode($decodedRaw, true);
-                if (
-                    is_array($decoded)
-                    && isset($decoded['last_at'], $decoded['subject_id'])
-                    && is_string($decoded['last_at'])
-                    && is_numeric($decoded['subject_id'])
-                ) {
-                    $cursor = [
-                        'last_at' => $decoded['last_at'],
-                        'subject_id' => (int) $decoded['subject_id'],
-                    ];
+                if (is_array($decoded) && isset($decoded['last_at']) && is_string($decoded['last_at'])) {
+                    $uid = null;
+                    if (isset($decoded['user_id']) && is_numeric($decoded['user_id'])) {
+                        $uid = (int) $decoded['user_id'];
+                    }
+                    if ($uid !== null) {
+                        $cursor = [
+                            'last_at' => $decoded['last_at'],
+                            'user_id' => $uid,
+                        ];
+                    }
                 }
             }
         }
 
-        // Inner subquery: latest record time per subject (zone scope from BaseModel).
-        $latestBySubject = WorkpointRecord::query()
-            ->selectRaw('subject_id, MAX(created_at) as last_at')
-            ->where('subject_type', $subjectClass)
-            ->groupBy('subject_id')
+        // Inner subquery: latest record time per user (zone scope from BaseModel).
+        $latestByUser = WorkpointRecord::query()
+            ->selectRaw('user_id, MAX(created_at) as last_at')
+            ->groupBy('user_id')
             ->toBase();
 
-        // Outer query must not use model scopes because FROM is an alias (`subject_last`).
+        // Outer query must not use model scopes because FROM is an alias (`user_last`).
         $rowsQuery = DB::query()
-            ->fromSub($latestBySubject, 'subject_last')
-            ->select(['subject_id', 'last_at']);
+            ->fromSub($latestByUser, 'user_last')
+            ->select(['user_id', 'last_at']);
 
         if ($cursor !== null) {
             $rowsQuery->where(function ($q) use ($cursor) {
                 $q->where('last_at', '<', $cursor['last_at'])
                     ->orWhere(function ($q2) use ($cursor) {
                         $q2->where('last_at', '=', $cursor['last_at'])
-                            ->where('subject_id', '<', $cursor['subject_id']);
+                            ->where('user_id', '<', $cursor['user_id']);
                     });
             });
         }
 
         $rows = $rowsQuery
             ->orderByDesc('last_at')
-            ->orderByDesc('subject_id')
+            ->orderByDesc('user_id')
             ->limit($perPage + 1)
             ->get();
 
@@ -618,20 +618,19 @@ class WorkpointRecordService
         $items = [];
         foreach ($slice as $row) {
             $items[] = [
-                'subject_type' => $subjectClass,
-                'subject_id' => (int) $row->subject_id
+                'user_id' => (int) $row->user_id,
+                'last_at' => $row->last_at,
             ];
         }
 
-        $coll = collect($items);
-        $coll = $this->addSubjectNames($coll);
+        $coll = $this->attachUserDisplayNames(collect($items));
 
         $nextCursor = null;
         if ($hasMore && $slice->isNotEmpty()) {
             $last = $slice->last();
             $payload = [
                 'last_at' => $last->last_at,
-                'subject_id' => (int) $last->subject_id,
+                'user_id' => (int) $last->user_id,
             ];
             $nextCursor = base64_encode(json_encode($payload));
         }
@@ -648,14 +647,13 @@ class WorkpointRecordService
      * @return array<string, mixed>
      */
     public function buildUserHistoryDetail(
-        string $subjectType,
-        int $subjectId,
+        int $userId,
         string $historyPeriod,
         ?int $historyCursorId,
         string $lang
     ): array {
-        $summary = $this->buildUserHistorySummary($subjectType, $subjectId, $lang);
-        $history = $this->buildUserHistoryLogs($subjectType, $subjectId, $historyPeriod, $historyCursorId, $lang);
+        $summary = $this->buildUserHistorySummary($userId, $lang);
+        $history = $this->buildUserHistoryLogs($userId, $historyPeriod, $historyCursorId, $lang);
         return array_merge($summary, $history);
     }
 
@@ -665,24 +663,23 @@ class WorkpointRecordService
      * @return array{totals: array<string, int>, ranks: array<string, int|null>, today_by_rule: array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>}
      */
     public function buildUserHistorySummary(
-        string $subjectType,
-        int $subjectId,
+        int $userId,
         string $lang
     ): array {
         return [
             'totals' => [
-                'day' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_DAY),
-                'week' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_WEEK),
-                'month' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_MONTH),
-                'year' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_YEAR),
+                'day' => $this->getUserTotalInPeriod($userId, PeriodHelper::PERIOD_DAY),
+                'week' => $this->getUserTotalInPeriod($userId, PeriodHelper::PERIOD_WEEK),
+                'month' => $this->getUserTotalInPeriod($userId, PeriodHelper::PERIOD_MONTH),
+                'year' => $this->getUserTotalInPeriod($userId, PeriodHelper::PERIOD_YEAR),
             ],
             'ranks' => [
-                'day' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_DAY),
-                'week' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_WEEK),
-                'month' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_MONTH),
-                'year' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_YEAR),
+                'day' => $this->getRankForUserInPeriod($userId, PeriodHelper::PERIOD_DAY),
+                'week' => $this->getRankForUserInPeriod($userId, PeriodHelper::PERIOD_WEEK),
+                'month' => $this->getRankForUserInPeriod($userId, PeriodHelper::PERIOD_MONTH),
+                'year' => $this->getRankForUserInPeriod($userId, PeriodHelper::PERIOD_YEAR),
             ],
-            'today_by_rule' => $this->getTodayProgressByRules($subjectType, $subjectId, $lang),
+            'today_by_rule' => $this->getTodayProgressByRules($userId, $lang),
         ];
     }
 
@@ -692,8 +689,7 @@ class WorkpointRecordService
      * @return array{period: string, items: array<int, array{id: int, case_key: string, case_name: string, points_delta: int, created_at: string|null}>, next_cursor: string|null}
      */
     public function buildUserHistoryLogs(
-        string $subjectType,
-        int $subjectId,
+        int $userId,
         string $historyPeriod,
         ?int $historyCursorId,
         string $lang
@@ -706,7 +702,7 @@ class WorkpointRecordService
                 $caseNameByKey[$key] = (string) ($rule['description'] ?? $key);
             }
         }
-        $history = $this->getHistoryForSubject($subjectType, $subjectId, $historyPeriod, $historyCursorId, $caseNameByKey);
+        $history = $this->getHistoryForUser($userId, $historyPeriod, $historyCursorId, $caseNameByKey);
 
         return array_merge(['period' => $historyPeriod], $history);
     }
