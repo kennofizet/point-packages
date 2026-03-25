@@ -2,9 +2,9 @@
 
 namespace Kennofizet\Workpoint\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Kennofizet\Workpoint\Core\Model\BaseModel;
 
-class WorkpointZoneCase extends Model
+class WorkpointZoneCase extends BaseModel
 {
     protected $fillable = [
         'zone_id',

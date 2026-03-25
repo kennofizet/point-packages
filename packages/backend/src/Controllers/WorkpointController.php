@@ -49,9 +49,8 @@ class WorkpointController extends Controller
         if (!in_array($lang, self::LANG_CODES, true)) {
             $lang = 'vi';
         }
-        $zoneId = $request->attributes->get('knf_core_user_zone_id_current');
 
-        $list = $this->workpointService->getMergedRulesForZone($zoneId, $lang);
+        $list = $this->workpointService->getMergedRulesForZone($lang);
 
         return $this->apiResponseWithContext([
             'language' => $lang,
@@ -61,16 +60,12 @@ class WorkpointController extends Controller
     }
 
     /**
-     * Save or update one zone case override (manager only). Body: zone_id, case_key, points, check, period?, cap?, descriptions?.
+     * Save or update one zone case override (manager only). Zone from current context (e.g. X-Knf-Zone-Id).
+     * Body: case_key, points, check, period?, cap?, descriptions?.
      */
     public function saveRule(Request $request): JsonResponse
     {
-        $zoneId = $request->input('zone_id');
-        if ($zoneId === null || $zoneId === '') {
-            return $this->apiErrorResponse('zone_id is required', 422);
-        }
-        $zoneId = (int) $zoneId;
-        if (!self::canManageZoneOrServer($zoneId)) {
+        if (!self::canManageZoneOrServer(self::currentUserZoneId())) {
             return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
         }
 
@@ -80,7 +75,7 @@ class WorkpointController extends Controller
         }
 
         try {
-            $this->workpointService->saveZoneCase($zoneId, $caseKey, [
+            $this->workpointService->saveZoneCase($caseKey, [
                 'points' => $request->input('points', 0),
                 'check' => $request->input('check', 'none'),
                 'period' => $request->input('period'),
@@ -95,20 +90,15 @@ class WorkpointController extends Controller
     }
 
     /**
-     * Reset zone rules to default: remove all custom config for the zone and clone from config (manager only).
+     * Reset zone rules to default for the current zone (manager only). Zone from context (e.g. X-Knf-Zone-Id).
      */
     public function resetZoneRules(Request $request): JsonResponse
     {
-        $zoneId = $request->input('zone_id');
-        if ($zoneId === null || $zoneId === '') {
-            return $this->apiErrorResponse('zone_id is required', 422);
-        }
-        $zoneId = (int) $zoneId;
-        if (!self::canManageZoneOrServer($zoneId)) {
+        if (!self::canManageZoneOrServer(self::currentUserZoneId())) {
             return $this->apiErrorResponse('You do not have permission to manage this zone', 403);
         }
 
-        $this->workpointService->resetZoneRulesToDefault($zoneId);
+        $this->workpointService->resetZoneRulesToDefault();
 
         return $this->apiResponseWithContext(['reset' => true]);
     }
@@ -124,9 +114,7 @@ class WorkpointController extends Controller
 
     private function authorizeHistoryAccess(): ?JsonResponse
     {
-        $zoneId = self::currentUserZoneId();
-
-        if ($zoneId === null || !self::canManageZoneOrServer($zoneId)) {
+        if (!self::canManageZoneOrServer(self::currentUserZoneId())) {
             return $this->apiErrorResponse('Forbidden', 403);
         }
 

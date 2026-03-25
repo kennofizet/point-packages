@@ -105,8 +105,8 @@ Inline notification when user earns points (e.g. “+2 workpoints”). Optional 
 - `getZones()` — GET zones (core).
 - `getTop(period, limit)` — GET top (workpoint).
 - `getRules(language)` — GET rules (workpoint; zone from header).
-- `saveRule(payload)` — POST save zone rule (manager).
-- `resetZoneRules(zoneId)` — POST reset zone rules (manager).
+- `saveRule(payload)` — POST save zone rule (manager). Zone from `X-Knf-Zone-Id` (same header as other workpoint calls).
+- `resetZoneRules()` — POST reset zone rules for the current zone (manager).
 
 Requests send `X-Knf-Token`; workpoint requests send `X-Knf-Zone-Id` from `localStorage.selected_zone` when set.
 

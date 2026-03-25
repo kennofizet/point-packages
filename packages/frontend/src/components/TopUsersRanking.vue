@@ -776,12 +776,10 @@ const canAdvanceSettingStep = computed(() => {
 })
 
 async function submitSetting() {
-  const zoneId = selectedZoneId.value ?? zones.value[0]?.id
-  if (zoneId == null || !workpointApi?.saveRule) return
+  if (!workpointApi?.saveRule) return
   savingRule.value = true
   try {
     const payload = {
-      zone_id: zoneId,
       case_key: settingForm.value.case_key,
       points: Number(settingForm.value.points) || 0,
       check: settingForm.value.check || 'none',
@@ -800,11 +798,10 @@ async function submitSetting() {
 }
 
 async function resetDefaultConfig() {
-  const zoneId = selectedZoneId.value ?? zones.value[0]?.id
-  if (zoneId == null || !workpointApi?.resetZoneRules) return
+  if (!workpointApi?.resetZoneRules) return
   if (!confirm(t.value.resetDefaultBtn + '?')) return
   try {
-    await workpointApi.resetZoneRules(zoneId)
+    await workpointApi.resetZoneRules()
     await fetchRules()
   } catch (e) {
     console.warn('Reset zone rules failed', e)

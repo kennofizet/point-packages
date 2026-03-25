@@ -22,6 +22,27 @@ trait HasWorkpointRecords
     }
 
     /**
+     * Whether this subject already has a stored workpoint row for the action (and optional target) in the current zone.
+     * Does not evaluate rule checks — only presence of a record. Use before calling {@see recordWorkpoint} or for UI gates.
+     *
+     * @param  object|null  $target  Same as {@see recordWorkpoint}: e.g. project/task model for per-target keys; omit for global keys.
+     */
+    public function hasWorkpointRecord(string $actionKey, object|null $target = null): bool
+    {
+        $query = $this->workpointRecords()
+            ->where('action_key', $actionKey);
+
+        if ($target === null) {
+            $query->whereNull('target_type')->whereNull('target_id');
+        } else {
+            $query->where('target_type', $target::class)
+                ->where('target_id', $target->getKey());
+        }
+
+        return $query->exists();
+    }
+
+    /**
      * Workpoint records where this model is the subject.
      */
     public function workpointRecords(): MorphMany

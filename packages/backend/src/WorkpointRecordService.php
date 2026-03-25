@@ -11,6 +11,7 @@ use Kennofizet\Workpoint\Models\WorkpointZoneCase;
 use Kennofizet\Workpoint\Services\PeriodTotalsSync;
 use Kennofizet\Workpoint\Support\PeriodHelper;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
 use Carbon\Carbon;
@@ -32,22 +33,20 @@ class WorkpointRecordService
         object|null $target = null,
         array $payload = []
     ): ?WorkpointRecord {
-        $zoneId = BaseModelActions::currentUserZoneId();
-        $caseConfig = $this->getCaseConfig($actionKey, $zoneId);
+        $caseConfig = $this->getCaseConfig($actionKey);
         if ($caseConfig === null) {
             return null;
         }
 
         $checkName = $caseConfig['check'] ?? 'none';
         $rule = $this->resolveRule($checkName);
-        if ($rule === null || !$rule->allowed($subject, $target, $actionKey, $payload, $caseConfig, $zoneId)) {
+        if ($rule === null || !$rule->allowed($subject, $target, $actionKey, $payload, $caseConfig)) {
             return null;
         }
 
         $pointsDelta = (int) ($caseConfig['points'] ?? 0);
 
         $record = WorkpointRecord::create([
-            'zone_id' => $zoneId,
             'subject_type' => $subject::class,
             'subject_id' => $subject->getKey(),
             'target_type' => $target ? $target::class : null,
@@ -104,21 +103,15 @@ class WorkpointRecordService
 
     private function getTopInPeriodFromTotals(string $period, int $limit): Collection
     {
-        $zoneId = BaseModelActions::currentUserZoneId();
         $periodKey = PeriodHelper::periodKey($period);
 
-        $query = WorkpointPeriodTotal::query()
+        $rows = WorkpointPeriodTotal::query()
             ->select('subject_type', 'subject_id', 'total_points')
             ->where('period_type', $period)
             ->where('period_key', $periodKey)
             ->orderByDesc('total_points')
-            ->limit($limit);
-
-        if ($zoneId !== null) {
-            $query->where('zone_id', $zoneId);
-        }
-
-        $rows = $query->get();
+            ->limit($limit)
+            ->get();
 
         $items = $rows->map(fn ($row) => [
             'subject_type' => $row->subject_type,
@@ -135,7 +128,6 @@ class WorkpointRecordService
         $table = WorkpointRecord::getTableName();
 
         $rows = WorkpointRecord::query()
-            ->inCurrentZone()
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
             ->selectRaw('subject_type, subject_id, SUM(points_delta) as total_points')
             ->groupBy('subject_type', 'subject_id')
@@ -205,16 +197,13 @@ class WorkpointRecordService
      *
      * @return array{points: int, check: string, period?: string, cap?: int, descriptions: array<string, string>}|null
      */
-    public function getCaseConfig(string $actionKey, ?int $zoneId = null): ?array
+    public function getCaseConfig(string $actionKey): ?array
     {
         $default = $this->config->get('workpoint_cases.' . $actionKey);
         if ($default === null || !is_array($default)) {
             return null;
         }
-        if ($zoneId === null) {
-            return $default;
-        }
-        $override = WorkpointZoneCase::where('zone_id', $zoneId)
+        $override = WorkpointZoneCase::query()
             ->where('case_key', $actionKey)
             ->first();
         if ($override === null) {
@@ -236,21 +225,16 @@ class WorkpointRecordService
     }
 
     /**
-     * Get merged rules for a zone (default config + zone overrides), formatted for the rules API.
+     * Merged rules for the current zone (default config + DB overrides), formatted for the rules API.
      *
-     * @param  int|null  $zoneId
-     * @param  string  $lang  Language code for description (e.g. 'vi', 'en').
      * @return array<int, array{key: string, points: int, check: string, period: string|null, cap: int|null, description: string}>
      */
-    public function getMergedRulesForZone(?int $zoneId, string $lang = 'vi'): array
+    public function getMergedRulesForZone(string $lang = 'vi'): array
     {
         $cases = $this->config->get('workpoint_cases', []);
         $overrides = [];
-        if ($zoneId !== null) {
-            $rows = WorkpointZoneCase::where('zone_id', $zoneId)->get();
-            foreach ($rows as $row) {
-                $overrides[$row->case_key] = $row;
-            }
+        foreach (WorkpointZoneCase::query()->get() as $row) {
+            $overrides[$row->case_key] = $row;
         }
 
         $list = [];
@@ -293,11 +277,12 @@ class WorkpointRecordService
 
     /**
      * Save or update one zone case override. Case key must exist in workpoint_cases config.
+     * Zone is enforced by BaseModel global scope (request context); caller must authorize (e.g. canManageZoneOrServer).
      *
      * @param  array{points: int, check: string, period?: string|null, cap?: int|null, descriptions?: array<string, string>|null}  $data
      * @throws \InvalidArgumentException If case_key is not in config.
      */
-    public function saveZoneCase(int $zoneId, string $caseKey, array $data): void
+    public function saveZoneCase(string $caseKey, array $data): void
     {
         $defaultCases = $this->config->get('workpoint_cases', []);
         if (!isset($defaultCases[$caseKey]) || !is_array($defaultCases[$caseKey])) {
@@ -312,26 +297,32 @@ class WorkpointRecordService
             'descriptions' => is_array($data['descriptions'] ?? null) ? $data['descriptions'] : null,
         ], fn ($v) => $v !== null);
 
-        WorkpointZoneCase::updateOrCreate(
-            ['zone_id' => $zoneId, 'case_key' => $caseKey],
+        WorkpointZoneCase::query()->updateOrCreate(
+            ['case_key' => $caseKey],
             $payload
         );
     }
 
     /**
-     * Reset zone rules to default: delete all zone overrides and clone from workpoint_cases config.
+     * Reset zone rules to default: delete all zone overrides for the current scoped zone and clone from workpoint_cases config.
+     * Caller must authorize (e.g. canManageZoneOrServer for current zone).
      */
-    public function resetZoneRulesToDefault(int $zoneId): void
+    public function resetZoneRulesToDefault(): void
     {
-        WorkpointZoneCase::where('zone_id', $zoneId)->delete();
+        $zoneId = BaseModelActions::currentUserZoneId();
+
+        // Hard-delete only this zone. withoutGlobalScopes() drops zone + soft-delete scopes so we filter
+        // zone_id explicitly; soft-deleted rows are included (no deleted_at filter) and forceDelete removes them.
+        WorkpointZoneCase::withoutGlobalScopes()
+            ->where('zone_id', $zoneId)
+            ->forceDelete();
 
         $cases = $this->config->get('workpoint_cases', []);
         foreach ($cases as $caseKey => $case) {
             if (!is_array($case)) {
                 continue;
             }
-            WorkpointZoneCase::create([
-                'zone_id' => $zoneId,
+            WorkpointZoneCase::query()->create([
                 'case_key' => $caseKey,
                 'points' => (int) ($case['points'] ?? 0),
                 'check' => (string) ($case['check'] ?? 'none'),
@@ -413,7 +404,6 @@ class WorkpointRecordService
         $table = WorkpointRecord::getTableName();
 
         $q = WorkpointRecord::query()
-            ->inCurrentZone()
             ->where($table . '.subject_type', $subjectType)
             ->where($table . '.subject_id', $subjectId)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
@@ -468,20 +458,14 @@ class WorkpointRecordService
 
         $range = PeriodHelper::range($period);
         $table = WorkpointRecord::getTableName();
-        $zoneId = BaseModelActions::currentUserZoneId();
 
-        $q = WorkpointRecord::query()
+        $betterCount = WorkpointRecord::query()
             ->where($table . '.subject_type', $subjectType)
             ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
             ->selectRaw($table . '.subject_id, SUM(' . $table . '.points_delta) as total_points')
             ->groupBy($table . '.subject_id')
-            ->havingRaw('SUM(' . $table . '.points_delta) > ?', [$myTotal]);
-
-        if ($zoneId !== null) {
-            $q->where($table . '.zone_id', $zoneId);
-        }
-
-        $betterCount = $q->count();
+            ->havingRaw('SUM(' . $table . '.points_delta) > ?', [$myTotal])
+            ->count();
 
         return $betterCount + 1;
     }
@@ -497,13 +481,11 @@ class WorkpointRecordService
         $range = PeriodHelper::range($period);
         $table = WorkpointRecord::getTableName();
 
-        $q = WorkpointRecord::query()
-            ->inCurrentZone()
+        return (int) WorkpointRecord::query()
             ->where($table . '.subject_type', $subjectType)
             ->where($table . '.subject_id', $subjectId)
-            ->whereBetween($table . '.created_at', [$range['start'], $range['end']]);
-
-        return (int) $q->sum('points_delta');
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
+            ->sum('points_delta');
     }
 
     /**
@@ -538,27 +520,20 @@ class WorkpointRecordService
      *
      * @return array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>
      */
-    public function getTodayProgressByRules(string $subjectType, int $subjectId, ?int $zoneId, string $lang): array
+    public function getTodayProgressByRules(string $subjectType, int $subjectId, string $lang): array
     {
         $range = PeriodHelper::range(PeriodHelper::PERIOD_DAY);
         $table = WorkpointRecord::getTableName();
 
-        $q = WorkpointRecord::query()
+        $earned = WorkpointRecord::query()
             ->where($table . '.subject_type', $subjectType)
             ->where($table . '.subject_id', $subjectId)
-            ->whereBetween($table . '.created_at', [$range['start'], $range['end']]);
-
-        if ($zoneId !== null) {
-            $q->where($table . '.zone_id', $zoneId);
-        } else {
-            $q->inCurrentZone();
-        }
-
-        $earned = $q->selectRaw('action_key, SUM(points_delta) as total')
+            ->whereBetween($table . '.created_at', [$range['start'], $range['end']])
+            ->selectRaw('action_key, SUM(points_delta) as total')
             ->groupBy('action_key')
             ->pluck('total', 'action_key');
 
-        $rules = $this->getMergedRulesForZone($zoneId ?? BaseModelActions::currentUserZoneId(), $lang);
+        $rules = $this->getMergedRulesForZone($lang);
         $out = [];
         foreach ($rules as $rule) {
             $key = $rule['key'];
@@ -587,9 +562,7 @@ class WorkpointRecordService
         $perPage = $perPage ?? (int) $this->config->get('workpoint.admin_subjects_per_page', 30);
         $perPage = min(max($perPage, 1), 100);
 
-        $zoneId = BaseModelActions::currentUserZoneId();
         $subjectClass = $this->getSubjectClass();
-        $table = WorkpointRecord::getTableName();
 
         /** @var array{last_at: string, subject_id: int}|null $cursor */
         $cursor = null;
@@ -611,21 +584,15 @@ class WorkpointRecordService
             }
         }
 
-        // Build aggregate subquery first (latest record time per subject in current zone).
+        // Inner subquery: latest record time per subject (zone scope from BaseModel).
         $latestBySubject = WorkpointRecord::query()
             ->selectRaw('subject_id, MAX(created_at) as last_at')
             ->where('subject_type', $subjectClass)
             ->groupBy('subject_id')
             ->toBase();
 
-        if ($zoneId === null) {
-            $latestBySubject->whereNull('zone_id');
-        } else {
-            $latestBySubject->where('zone_id', $zoneId);
-        }
-
-        $rowsQuery = WorkpointRecord::query()
-            ->toBase()
+        // Outer query must not use model scopes because FROM is an alias (`subject_last`).
+        $rowsQuery = DB::query()
             ->fromSub($latestBySubject, 'subject_last')
             ->select(['subject_id', 'last_at']);
 
@@ -702,7 +669,6 @@ class WorkpointRecordService
         int $subjectId,
         string $lang
     ): array {
-        $zoneId = BaseModelActions::currentUserZoneId();
         return [
             'totals' => [
                 'day' => $this->getSubjectTotalInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_DAY),
@@ -716,7 +682,7 @@ class WorkpointRecordService
                 'month' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_MONTH),
                 'year' => $this->getRankForSubjectInPeriod($subjectType, $subjectId, PeriodHelper::PERIOD_YEAR),
             ],
-            'today_by_rule' => $this->getTodayProgressByRules($subjectType, $subjectId, $zoneId, $lang),
+            'today_by_rule' => $this->getTodayProgressByRules($subjectType, $subjectId, $lang),
         ];
     }
 
@@ -732,8 +698,7 @@ class WorkpointRecordService
         ?int $historyCursorId,
         string $lang
     ): array {
-        $zoneId = BaseModelActions::currentUserZoneId();
-        $rules = $this->getMergedRulesForZone($zoneId, $lang);
+        $rules = $this->getMergedRulesForZone($lang);
         $caseNameByKey = [];
         foreach ($rules as $rule) {
             $key = (string) ($rule['key'] ?? '');

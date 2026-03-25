@@ -70,7 +70,21 @@ $user->recordWorkpoint('task_accepted_sla', $task, ['sla' => 24]); // with paylo
 
 Returns `WorkpointRecord` or `null` if the rule disallows (e.g. already earned for that target/period).
 
-**3. Query records:**
+**3. Check if a record already exists** (current zone; same `action_key` / target shape as when recording — does **not** re-run rule logic, only looks for a row):
+
+```php
+use App\Constants\ProjectConstant;
+
+if ($user->hasWorkpointRecord(ProjectConstant::$workpointCase['project_confirm_assign'], $project)) {
+    // already has a workpoint row for this case + project in this zone
+}
+
+if ($user->hasWorkpointRecord('app_first_visit_day')) {
+    // no-target case: matches rows with null target
+}
+```
+
+**4. Query records:**
 
 ```php
 $user->workpointRecords;
@@ -87,8 +101,8 @@ All under `{packages-core.api_prefix}/{workpoint.api_prefix}/` (e.g. `api/knf/wo
 |--------|----------|-------------|
 | GET | `top?period=day\|week\|month\|year&limit=10` | Top subjects by points in period (zone-scoped). |
 | GET | `rules?language=vi\|en` | Merged rules (default + zone overrides). Returns `rules`, `language`, `isManager`. |
-| POST | `rules/save` | Save one zone case override (manager). Body: `zone_id`, `case_key`, `points`, `check`, `period?`, `cap?`, `descriptions?`. |
-| POST | `rules/reset` | Reset zone rules to default: delete overrides and clone from config (manager). Body: `zone_id`. |
+| POST | `rules/save` | Save one zone case override (manager). Zone from `X-Knf-Zone-Id`. Body: `case_key`, `points`, `check`, `period?`, `cap?`, `descriptions?`. |
+| POST | `rules/reset` | Reset zone rules to default for the current zone (manager). Zone from `X-Knf-Zone-Id`; no body required. |
 | GET | `history/me?period=day\|week\|month\|year&cursor=&language=vi\|en` | Current user: point log in period (cursor = last record `id` for “load more”), totals, ranks, `today_by_rule`, `isManager`. |
 | GET | `history/user/{subjectId}?period=&cursor=&language=` | Same payload for one user (self always; others only if manager for zone / server). |
 | GET | `admin/subjects?cursor=` | **Manager only.** Cursor-paginated users who have workpoints in the zone (`next_cursor` is base64 JSON). |
@@ -105,6 +119,6 @@ History summary responses include **`today_by_rule`**: per rule, `earned` is poi
 | Config | `php artisan vendor:publish --tag=workpoint-config` |
 | Cases config (optional first publish) | `php artisan vendor:publish --tag=workpoint-cases-config` |
 | Migrations | `php artisan vendor:publish --tag=workpoint-migrations` then `php artisan migrate` |
-| Model | `use HasWorkpointRecords;` → `$model->recordWorkpoint('action_key', $target)` |
+| Model | `use HasWorkpointRecords;` → `$model->recordWorkpoint(...)`, `$model->hasWorkpointRecord($key, $target?)` |
 
 More in config file comments (events, listeners, rules).

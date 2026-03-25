@@ -4,7 +4,7 @@ namespace Kennofizet\Workpoint\Controllers;
 
 use Kennofizet\PackagesCore\Traits\GlobalDataTrait;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
-use Kennofizet\PackagesCore\Core\Model\BaseModelResponse;
+use Kennofizet\Workpoint\Core\Model\BaseModelResponse;
 use Illuminate\Http\JsonResponse;
 
 abstract class Controller

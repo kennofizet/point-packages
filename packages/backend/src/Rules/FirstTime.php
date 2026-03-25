@@ -13,17 +13,11 @@ class FirstTime implements CheckRuleInterface
         string $actionKey,
         array $payload,
         array $caseConfig,
-        ?int $zoneId = null
     ): bool {
-        $query = WorkpointRecord::query()
+        return !WorkpointRecord::query()
             ->where('subject_type', $subject::class)
             ->where('subject_id', $subject->getKey())
-            ->where('action_key', $actionKey);
-
-        if ($zoneId !== null) {
-            $query->where('zone_id', $zoneId);
-        }
-
-        return !$query->exists();
+            ->where('action_key', $actionKey)
+            ->exists();
     }
 }

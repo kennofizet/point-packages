@@ -14,7 +14,6 @@ class PeriodTotalsSync
 {
     public function syncRecord(WorkpointRecord $record): void
     {
-        $zoneId = $record->zone_id;
         $subjectType = $record->subject_type;
         $subjectId = $record->subject_id;
         $delta = (int) $record->points_delta;
@@ -24,9 +23,8 @@ class PeriodTotalsSync
 
         foreach (PeriodHelper::PERIODS_ALL as $periodType) {
             $periodKey = PeriodHelper::periodKey($periodType);
-            $row = WorkpointPeriodTotal::query()
-                ->where('zone_id', $zoneId)
-                ->where('subject_type', $subjectType)
+            // Match row by the record's zone (explicit + no global scope: safe in queue / multi-zone).
+            $row = WorkpointPeriodTotal::where('subject_type', $subjectType)
                 ->where('subject_id', $subjectId)
                 ->where('period_type', $periodType)
                 ->where('period_key', $periodKey)
@@ -35,7 +33,6 @@ class PeriodTotalsSync
                 $row->increment('total_points', $delta);
             } else {
                 WorkpointPeriodTotal::create([
-                    'zone_id' => $zoneId,
                     'subject_type' => $subjectType,
                     'subject_id' => $subjectId,
                     'period_type' => $periodType,

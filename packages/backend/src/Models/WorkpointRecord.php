@@ -2,12 +2,12 @@
 
 namespace Kennofizet\Workpoint\Models;
 
+use Kennofizet\Workpoint\Core\Model\BaseModel;
 use Kennofizet\Workpoint\Support\PeriodHelper;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class WorkpointRecord extends Model
+class WorkpointRecord extends BaseModel
 {
     protected $table;
 
@@ -57,18 +57,6 @@ class WorkpointRecord extends Model
     public function target(): MorphTo
     {
         return $this->morphTo('target');
-    }
-
-    /**
-     * Scope to current user zone (packages-core). No-op if no zone in request.
-     */
-    public function scopeInCurrentZone(Builder $query): Builder
-    {
-        $zoneId = \Kennofizet\PackagesCore\Core\Model\BaseModelActions::currentUserZoneId();
-        if ($zoneId === null) {
-            return $query;
-        }
-        return $query->where($this->getTable() . '.zone_id', $zoneId);
     }
 
     /**

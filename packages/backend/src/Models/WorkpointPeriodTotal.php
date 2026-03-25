@@ -2,13 +2,13 @@
 
 namespace Kennofizet\Workpoint\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Kennofizet\Workpoint\Core\Model\BaseModel;
 
 /**
  * Pre-aggregated totals per subject per period for fast "top by period" queries.
  * Synced on each WorkpointRecord creation when workpoint.use_period_totals_table is true.
  */
-class WorkpointPeriodTotal extends Model
+class WorkpointPeriodTotal extends BaseModel
 {
     protected $table;
 

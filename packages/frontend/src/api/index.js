@@ -56,10 +56,10 @@ export function createWorkpointApi(coreUrl, workpointUrl, token) {
     /** Rules (workpoint cases) for rule page. Zone from X-Knf-Zone-Id. Returns { rules, language, isManager }. */
     getRules: (language = 'vi') =>
       workpointApi.get('/rules', { params: { language } }),
-    /** Save one zone case override (manager). Body: zone_id, case_key, points, check, period?, cap?, descriptions? */
+    /** Save one zone case override (manager). Zone from X-Knf-Zone-Id. Body: case_key, points, check, period?, cap?, descriptions? */
     saveRule: (payload) => workpointApi.post('/rules/save', payload),
-    /** Reset zone rules to default (manager). Body: zone_id */
-    resetZoneRules: (zoneId) => workpointApi.post('/rules/reset', { zone_id: zoneId }),
+    /** Reset zone rules to default (manager). Zone from X-Knf-Zone-Id. */
+    resetZoneRules: () => workpointApi.post('/rules/reset', {}),
     /** Current user summary: totals + ranks + today_by_rule + isManager */
     getHistoryMeSummary: (language = 'vi') =>
       workpointApi.get('/history/me/summary', { params: { language } }),
