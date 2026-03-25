@@ -1,6 +1,6 @@
 {
   "name": "@kennofizet/workpoint-frontend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Workpoint frontend package — top users ranking and point-earned UI components",
   "main": "./src/index.js",
   "module": "./src/index.js",
