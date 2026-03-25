@@ -66,6 +66,22 @@ trait HasWorkpointRecords
         return $query->exists();
     }
 
+    /**
+     * Zone IDs the user is a member of (from core {@see User}: `zones` / `zone_id`).
+     * Pass null to use the current authenticated user ({@see BaseModelActions::currentUserId}).
+     *
+     * @return array<int, int>
+     */
+    public function getZoneIdsForUser(?int $userId = null): array
+    {
+        $resolved = $this->resolveWorkpointUserId($userId);
+        if ($resolved === null || $resolved <= 0) {
+            return [];
+        }
+
+        return $this->extractCurrentUserZoneIds($resolved);
+    }
+
     private function resolveWorkpointUserId(?int $userId = null): ?int
     {
         $id = BaseModelActions::currentUserId() ?? $userId;
@@ -121,6 +137,14 @@ trait HasWorkpointRecords
         }
         
 
+        return $this->zoneIdsForUserMember($userId);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function zoneIdsForUserMember(int $userId): array
+    {
         if ($userId <= 0) {
             return [];
         }
