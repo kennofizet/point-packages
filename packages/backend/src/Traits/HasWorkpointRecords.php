@@ -44,7 +44,7 @@ trait HasWorkpointRecords
             return false;
         }
 
-        $query = WorkpointRecord::query()
+        $query = WorkpointRecord::withoutGlobalScopes()
             ->where('user_id', $resolvedUserId)
             ->where('action_key', $actionKey);
 
