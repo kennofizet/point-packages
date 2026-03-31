@@ -66,6 +66,42 @@ trait HasWorkpointRecords
         return $query->exists();
     }
 
+    public function canWorkpointRecordZoneIds(string $actionKey, object|null $target = null, ?array $zoneIds = null, ?int $userId = null): array
+    {
+        $allowedZoneIds = [];
+
+        $resolvedUserId = $this->resolveWorkpointUserId($userId);
+        if ($resolvedUserId === null || $resolvedUserId <= 0) {
+            return $allowedZoneIds;
+        }
+        $resolvedZoneIds = $this->resolveWorkpointZoneIds($resolvedUserId, $zoneIds);
+        if ($resolvedZoneIds === []) {
+            return $allowedZoneIds;
+        }
+        $user = User::query()->find($resolvedUserId);
+        if (!is_object($user)) {
+            return $allowedZoneIds;
+        }
+
+        foreach ($resolvedZoneIds as $zoneId) {
+            $service = app(WorkpointRecordService::class);
+            $caseConfig = $service->getCaseConfig($actionKey, $zoneId);
+            if ($caseConfig === null) {
+                continue;
+            }
+
+            $checkName = $caseConfig['check'] ?? 'none';
+            $rule = $this->resolveRule($checkName);
+
+            if ($rule === null || !$rule->allowed($user, $target, $actionKey, [], $caseConfig, $zoneId)) {
+                continue;
+            }
+            $allowedZoneIds[] = $zoneId;
+        }
+
+        return $allowedZoneIds;
+    }
+
     /**
      * Zone IDs the user is a member of (from core {@see User}: `zones` / `zone_id`).
      * Pass null to use the current authenticated user ({@see BaseModelActions::currentUserId}).

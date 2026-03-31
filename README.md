@@ -9,7 +9,7 @@ Monorepo for the **Workpoint** (points/ranking) system: Laravel backend + Vue 3 
 
 **Quick links**
 
-- Backend: `composer require kennofizet/workpoint-backend` → publish config & migrations → use `HasWorkpointRecords` and call APIs.
+- Backend: `composer require kennofizet/workpoint-backend` → publish config & migrations → use `HasWorkpointRecords` or `canWorkpointRecordZoneIds` and call APIs.
 - Frontend: install `@kennofizet/workpoint-frontend`, call `installWorkpointModule(app, { coreUrl, backendUrl, token })`, use `<WorkpointTopUsersRanking />` and `<WorkpointPointEarnedNotification />`.
 
 See each package README for details.

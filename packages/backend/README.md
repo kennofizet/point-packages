@@ -99,6 +99,27 @@ if ($user->hasWorkpointRecord('app_first_visit_day')) {
 // Optional: explicit zoneIds and/or userId
 $user->hasWorkpointRecord('task_completed_on_time', $task, [1, 2], 123);
 ```
+
+**4. Get zone IDs that can record this action now** (after membership filter + rule check):
+
+```php
+// Returns only zone IDs where this action is currently allowed for this user.
+$allowedZoneIds = $user->canWorkpointRecordZoneIds('task_completed_on_time', $task);
+
+// Optional: limit candidate zones and/or force user id.
+$allowedZoneIds = $user->canWorkpointRecordZoneIds(
+    'task_completed_on_time',
+    $task,
+    [1, 2, 3], // optional candidate zones
+    123        // optional user id override
+);
+```
+
+`canWorkpointRecordZoneIds()` returns `array<int, int>`:
+- First filters zones to zones the user is a member of.
+- Then checks each zone with the configured rule (`check`) for that action key.
+- Returns only zones that pass the rule at call time.
+
 ---
 
 ## API
@@ -127,6 +148,6 @@ History summary responses include **`today_by_rule`**: per rule, `earned` is poi
 | Config | `php artisan vendor:publish --tag=workpoint-config` |
 | Cases config (optional first publish) | `php artisan vendor:publish --tag=workpoint-cases-config` |
 | Migrations | `php artisan vendor:publish --tag=workpoint-migrations` then `php artisan migrate` |
-| Model | `use HasWorkpointRecords;` → `$model->recordWorkpoint(...)`, `$model->hasWorkpointRecord($key, $target?)` |
+| Model | `use HasWorkpointRecords;` → `$model->recordWorkpoint(...)`, `$model->hasWorkpointRecord($key, $target?)`, `$model->canWorkpointRecordZoneIds($key, $target?)` |
 
 More in config file comments (events, listeners, rules).
