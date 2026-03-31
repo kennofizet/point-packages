@@ -91,7 +91,7 @@ trait HasWorkpointRecords
             }
 
             $checkName = $caseConfig['check'] ?? 'none';
-            $rule = $this->resolveRule($checkName);
+            $rule = $service->resolveRule($checkName);
 
             if ($rule === null || !$rule->allowed($user, $target, $actionKey, [], $caseConfig, $zoneId)) {
                 continue;
