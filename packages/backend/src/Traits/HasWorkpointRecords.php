@@ -89,6 +89,7 @@ trait HasWorkpointRecords
             if ($caseConfig === null) {
                 continue;
             }
+            $caseConfig['user_id'] = $userId;
 
             $checkName = $caseConfig['check'] ?? 'none';
             $rule = $service->resolveRule($checkName);
