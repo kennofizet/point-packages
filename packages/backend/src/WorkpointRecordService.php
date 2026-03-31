@@ -351,7 +351,7 @@ class WorkpointRecordService
         }
     }
 
-    private function resolveRule(string $checkName): ?CheckRuleInterface
+    public function resolveRule(string $checkName): ?CheckRuleInterface
     {
         if (isset($this->ruleCache[$checkName])) {
             return $this->ruleCache[$checkName];
