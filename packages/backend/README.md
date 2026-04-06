@@ -45,7 +45,7 @@ User display column comes from `packages-core` config:
 ## Config
 
 - **config/workpoint.php** — Tables, API prefix, period totals, event/listeners, rules map.
-- **config/workpoint_cases.php** — Action keys (e.g. `task_completed_on_time`) with `points`, `check`, `period`, `cap`, `descriptions` (vi/en). Per-zone overrides stored in DB; defaults from this file.
+- **config/workpoint_cases.php** — Action keys (e.g. `task_completed_on_time`) with `points`, `check`, `period`, `cap`, optional **`limit_period`** (day|week|month|year) and **`limit_period_time`** (max recordings per user per zone in that window, enforced after the rule check; omit or `0` for no extra limit), and `descriptions` (vi/en). Per-zone overrides stored in DB; defaults from this file.
 
 ---
 
@@ -136,7 +136,7 @@ All under `{packages-core.api_prefix}/{workpoint.api_prefix}/` (e.g. `api/knf/wo
 | GET | `history/user/{userId}?period=&cursor=&language=` | Same payload for one user (self always; others only if manager for zone / server). |
 | GET | `admin/members?cursor=` | **Manager only.** Cursor-paginated users who have workpoints in the zone (`next_cursor` is base64 JSON). |
 
-History summary responses include **`today_by_rule`**: per rule, `earned` is points earned today; **`max_points`** is the max total points for that rule when the check is capped — for `count_cap_per_period` it is **`points × cap`** (cap = max awards per period); for `first_time` / `first_time_per_period` / `first_time_per_target` it is **`points`** (one award). **`max_points`** is `null` when unlimited (`none` or no cap on count rules).
+History summary responses include **`today_by_rule`**: per rule, `earned` is points earned today; **`max_points`** is the max total points for that rule when the check is capped — for `count_cap_per_period` it is **`points × cap`** (cap = max awards per period); for `first_time` / `first_time_per_period` / `first_time_per_target` it is **`points`** (one award). If **`limit_period_time`** is set, an additional ceiling **`points × limit_period_time`** applies; when both a count rule and a limit apply, the smaller ceiling is shown. **`max_points`** is `null` when unlimited (`none` or no cap on count rules and no limit period cap).
 
 ---
 

@@ -84,6 +84,10 @@ class WorkpointRecordService
             return null;
         }
 
+        if (!$this->isWithinLimitPeriod($userId, $actionKey, $zoneId, $caseConfig)) {
+            return null;
+        }
+
         $pointsDelta = (int) ($caseConfig['points'] ?? 0);
 
         $record = WorkpointRecord::query()->create([
@@ -209,7 +213,7 @@ class WorkpointRecordService
     /**
      * Get case config for an action key, merging default from config with zone override from DB.
      *
-     * @return array{points: int, check: string, period?: string, cap?: int, descriptions: array<string, string>}|null
+     * @return array{points: int, check: string, period?: string, cap?: int, limit_period?: string, limit_period_time?: int, descriptions: array<string, string>}|null
      */
     public function getCaseConfig(string $actionKey, ?int $zoneId = null): ?array
     {
@@ -228,7 +232,7 @@ class WorkpointRecordService
             return $default;
         }
         $merged = $default;
-        foreach (['points', 'check', 'period', 'cap'] as $key) {
+        foreach (['points', 'check', 'period', 'cap', 'limit_period', 'limit_period_time'] as $key) {
             $v = $override->getAttribute($key);
             if ($v !== null) {
                 $merged[$key] = $v;
@@ -243,9 +247,41 @@ class WorkpointRecordService
     }
 
     /**
+     * Optional hard cap from case config: max recordings per user per action in `limit_period`
+     * (and per zone when $zoneId is set). Runs after the rule check; unset or zero `limit_period_time` means no limit.
+     */
+    public function isWithinLimitPeriod(int $userId, string $actionKey, ?int $zoneId, array $caseConfig): bool
+    {
+        $limitTime = (int) ($caseConfig['limit_period_time'] ?? 0);
+        if ($limitTime <= 0) {
+            return true;
+        }
+
+        $limitPeriod = (string) ($caseConfig['limit_period'] ?? PeriodHelper::PERIOD_DAY);
+        $start = PeriodHelper::start($limitPeriod);
+
+        if ($zoneId !== null) {
+            $count = WorkpointRecord::withoutGlobalScopes()
+                ->where('zone_id', $zoneId)
+                ->where('user_id', $userId)
+                ->where('action_key', $actionKey)
+                ->where('created_at', '>=', $start)
+                ->count();
+        } else {
+            $count = WorkpointRecord::query()
+                ->where('user_id', $userId)
+                ->where('action_key', $actionKey)
+                ->where('created_at', '>=', $start)
+                ->count();
+        }
+
+        return $count < $limitTime;
+    }
+
+    /**
      * Merged rules for the current zone (default config + DB overrides), formatted for the rules API.
      *
-     * @return array<int, array{key: string, points: int, check: string, period: string|null, cap: int|null, description: string}>
+     * @return array<int, array{key: string, points: int, check: string, period: string|null, cap: int|null, limit_period: string|null, limit_period_time: int|null, description: string}>
      */
     public function getMergedRulesForZone(string $lang = 'vi'): array
     {
@@ -263,7 +299,7 @@ class WorkpointRecordService
             $merged = $case;
             if (isset($overrides[$key])) {
                 $o = $overrides[$key];
-                foreach (['points', 'check', 'period', 'cap'] as $k) {
+                foreach (['points', 'check', 'period', 'cap', 'limit_period', 'limit_period_time'] as $k) {
                     $v = $o->getAttribute($k);
                     if ($v !== null) {
                         $merged[$k] = $v;
@@ -286,6 +322,8 @@ class WorkpointRecordService
                 'check' => (string) ($merged['check'] ?? 'none'),
                 'period' => isset($merged['period']) ? (string) $merged['period'] : null,
                 'cap' => isset($merged['cap']) ? (int) $merged['cap'] : null,
+                'limit_period' => isset($merged['limit_period']) ? (string) $merged['limit_period'] : null,
+                'limit_period_time' => isset($merged['limit_period_time']) ? (int) $merged['limit_period_time'] : null,
                 'description' => $description,
             ];
         }
@@ -297,7 +335,7 @@ class WorkpointRecordService
      * Save or update one zone case override. Case key must exist in workpoint_cases config.
      * Zone is enforced by BaseModel global scope (request context); caller must authorize (e.g. canManageZoneOrServer).
      *
-     * @param  array{points: int, check: string, period?: string|null, cap?: int|null, descriptions?: array<string, string>|null}  $data
+     * @param  array{points: int, check: string, period?: string|null, cap?: int|null, limit_period?: string|null, limit_period_time?: int|null, descriptions?: array<string, string>|null}  $data
      * @throws \InvalidArgumentException If case_key is not in config.
      */
     public function saveZoneCase(string $caseKey, array $data): void
@@ -307,11 +345,18 @@ class WorkpointRecordService
             throw new \InvalidArgumentException('Invalid case_key');
         }
 
+        $limitPeriodTime = null;
+        if (isset($data['limit_period_time']) && $data['limit_period_time'] !== '' && (int) $data['limit_period_time'] > 0) {
+            $limitPeriodTime = (int) $data['limit_period_time'];
+        }
+
         $payload = array_filter([
             'points' => (int) ($data['points'] ?? 0),
             'check' => is_string($data['check'] ?? null) ? $data['check'] : 'none',
             'period' => isset($data['period']) && $data['period'] !== '' ? (string) $data['period'] : null,
             'cap' => isset($data['cap']) && $data['cap'] !== '' ? (int) $data['cap'] : null,
+            'limit_period' => isset($data['limit_period']) && $data['limit_period'] !== '' ? (string) $data['limit_period'] : null,
+            'limit_period_time' => $limitPeriodTime,
             'descriptions' => is_array($data['descriptions'] ?? null) ? $data['descriptions'] : null,
         ], fn ($v) => $v !== null);
 
@@ -346,6 +391,8 @@ class WorkpointRecordService
                 'check' => (string) ($case['check'] ?? 'none'),
                 'period' => isset($case['period']) ? (string) $case['period'] : null,
                 'cap' => isset($case['cap']) ? (int) $case['cap'] : null,
+                'limit_period' => isset($case['limit_period']) ? (string) $case['limit_period'] : null,
+                'limit_period_time' => isset($case['limit_period_time']) ? (int) $case['limit_period_time'] : null,
                 'descriptions' => $case['descriptions'] ?? null,
             ]);
         }
@@ -503,25 +550,35 @@ class WorkpointRecordService
         $check = (string) ($rule['check'] ?? 'none');
         $cap = isset($rule['cap']) ? (int) $rule['cap'] : null;
 
+        $fromCheck = null;
         if ($check === 'count_cap_per_period') {
             if ($cap !== null && $cap > 0 && $points > 0) {
-                return $points * $cap;
+                $fromCheck = $points * $cap;
             }
+        } elseif (in_array($check, ['first_time', 'first_time_per_period', 'first_time_per_target'], true)) {
+            $fromCheck = $points > 0 ? $points : null;
+        }
 
+        $limitT = isset($rule['limit_period_time']) ? (int) $rule['limit_period_time'] : 0;
+        $fromLimit = ($limitT > 0 && $points > 0) ? $points * $limitT : null;
+
+        if ($fromCheck === null && $fromLimit === null) {
             return null;
         }
-
-        if (in_array($check, ['first_time', 'first_time_per_period', 'first_time_per_target'], true)) {
-            return $points > 0 ? $points : null;
+        if ($fromCheck === null) {
+            return $fromLimit;
+        }
+        if ($fromLimit === null) {
+            return $fromCheck;
         }
 
-        return null;
+        return min($fromCheck, $fromLimit);
     }
 
     /**
      * Points earned today per action_key, merged with zone rules (description, cap).
      *
-     * @return array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>
+     * @return array<int, array{key: string, description: string, earned: int, max_points: int|null}>
      */
     public function getTodayProgressByRules(int $userId, string $lang): array
     {
@@ -545,9 +602,10 @@ class WorkpointRecordService
             }
             
             $out[] = [
+                'key' => $key,
                 'description' => $rule['description'],
                 'earned' => (int) ($earned[$key] ?? 0),
-                'max_points' => $this->maxPointsForRuleDisplay($rule)
+                'max_points' => $this->maxPointsForRuleDisplay($rule),
             ];
         }
 
@@ -660,7 +718,7 @@ class WorkpointRecordService
     /**
      * Summary for history screen (no logs): totals + ranks + today progress.
      *
-     * @return array{totals: array<string, int>, ranks: array<string, int|null>, today_by_rule: array<int, array{key: string, description: string, earned: int, cap: int|null, points: int, max_points: int|null, rule_period: string|null}>}
+     * @return array{totals: array<string, int>, ranks: array<string, int|null>, today_by_rule: array<int, array{key: string, description: string, earned: int, max_points: int|null}>}
      */
     public function buildUserHistorySummary(
         int $userId,

@@ -61,7 +61,7 @@ class WorkpointController extends Controller
 
     /**
      * Save or update one zone case override (manager only). Zone from current context (e.g. X-Knf-Zone-Id).
-     * Body: case_key, points, check, period?, cap?, descriptions?.
+     * Body: case_key, points, check, period?, cap?, limit_period?, limit_period_time?, descriptions?.
      */
     public function saveRule(Request $request): JsonResponse
     {
@@ -80,6 +80,8 @@ class WorkpointController extends Controller
                 'check' => $request->input('check', 'none'),
                 'period' => $request->input('period'),
                 'cap' => $request->input('cap'),
+                'limit_period' => $request->input('limit_period'),
+                'limit_period_time' => $request->input('limit_period_time'),
                 'descriptions' => $request->input('descriptions'),
             ]);
         } catch (\InvalidArgumentException) {

@@ -1,5 +1,10 @@
 <?php declare(strict_types=1);
 
+/**
+ * Per action key: `points`, `check`, `period`, `cap`, `descriptions`, and optionally:
+ * - `limit_period` — day|week|month|year (calendar window; default day if omitted when limiting).
+ * - `limit_period_time` — max recordings per user per zone in that window (enforced after `check`; omit or 0 = no extra limit).
+ */
 return [
     'case_1' => [
         'points' => 0

@@ -13,6 +13,8 @@ class WorkpointZoneCase extends BaseModel
         'check',
         'period',
         'cap',
+        'limit_period',
+        'limit_period_time',
         'descriptions',
     ];
 
@@ -25,6 +27,7 @@ class WorkpointZoneCase extends BaseModel
     protected $casts = [
         'points' => 'integer',
         'cap' => 'integer',
+        'limit_period_time' => 'integer',
         'descriptions' => 'array',
     ];
 

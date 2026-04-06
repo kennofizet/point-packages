@@ -111,6 +111,8 @@
                 <span class="workpoint-top-users__rule-points">{{ rule.points }} {{ t.pts }}</span>
                 <span v-if="rule.period" class="workpoint-top-users__rule-period">{{ t.periodLabel }}: {{ t.period(rule.period) }}</span>
                 <span v-if="rule.cap != null" class="workpoint-top-users__rule-cap">{{ t.capLabel }}: {{ rule.cap }}</span>
+                <span v-if="rule.limit_period" class="workpoint-top-users__rule-limit-period">{{ t.limitPeriodShort }}: {{ t.period(rule.limit_period) }}</span>
+                <span v-if="rule.limit_period_time != null && rule.limit_period_time > 0" class="workpoint-top-users__rule-limit-times">{{ t.limitTimesShort }}: {{ rule.limit_period_time }}</span>
               </div>
             </div>
           </li>
@@ -150,6 +152,16 @@
               </select>
               <label class="workpoint-top-users__popup-label">{{ t.capLabel }}</label>
               <input v-model.number="settingForm.cap" type="number" min="0" class="workpoint-top-users__popup-input" placeholder="—" />
+              <label class="workpoint-top-users__popup-label">{{ t.limitPeriodSetting }}</label>
+              <select v-model="settingForm.limit_period" class="workpoint-top-users__popup-select">
+                <option value="">—</option>
+                <option value="day">{{ t.period('day') }}</option>
+                <option value="week">{{ t.period('week') }}</option>
+                <option value="month">{{ t.period('month') }}</option>
+                <option value="year">{{ t.period('year') }}</option>
+              </select>
+              <label class="workpoint-top-users__popup-label">{{ t.limitTimesSetting }}</label>
+              <input v-model.number="settingForm.limit_period_time" type="number" min="0" class="workpoint-top-users__popup-input" placeholder="—" />
             </div>
             <!-- Step 3: points + descriptions (vi / en) -->
             <div v-if="settingStep === 3" class="workpoint-top-users__popup-step">
@@ -419,6 +431,10 @@ const TRANSLATIONS = {
     ruleTitle: 'Quy định nhận điểm',
     periodLabel: 'Chu kỳ',
     capLabel: 'Giới hạn',
+    limitPeriodShort: 'Giới hạn CK',
+    limitTimesShort: 'Tối đa (lần)',
+    limitPeriodSetting: 'Chu kỳ giới hạn (thêm)',
+    limitTimesSetting: 'Số lần tối đa trong chu kỳ đó',
     noRules: 'Chưa có quy định.',
     settingBtn: 'Cài đặt',
     resetDefaultBtn: 'Đặt lại mặc định',
@@ -461,6 +477,10 @@ const TRANSLATIONS = {
     ruleTitle: 'Points rules',
     periodLabel: 'Period',
     capLabel: 'Cap',
+    limitPeriodShort: 'Limit period',
+    limitTimesShort: 'Max times',
+    limitPeriodSetting: 'Extra limit period',
+    limitTimesSetting: 'Max awards in that period',
     noRules: 'No rules.',
     settingBtn: 'Setting',
     resetDefaultBtn: 'Reset default',
@@ -520,6 +540,8 @@ const settingForm = ref({
   check: 'none',
   period: '',
   cap: null,
+  limit_period: '',
+  limit_period_time: null,
   points: 0,
   descriptions: { vi: '', en: '' },
 })
@@ -576,6 +598,10 @@ const t = computed(() => {
     ruleTitle: lang.ruleTitle,
     periodLabel: lang.periodLabel,
     capLabel: lang.capLabel,
+    limitPeriodShort: lang.limitPeriodShort,
+    limitTimesShort: lang.limitTimesShort,
+    limitPeriodSetting: lang.limitPeriodSetting,
+    limitTimesSetting: lang.limitTimesSetting,
     noRules: lang.noRules,
     settingBtn: lang.settingBtn,
     resetDefaultBtn: lang.resetDefaultBtn,
@@ -757,6 +783,8 @@ function openSettingPopup() {
     check: firstRule?.check ?? 'none',
     period: firstRule?.period ?? '',
     cap: firstRule?.cap ?? null,
+    limit_period: firstRule?.limit_period ?? '',
+    limit_period_time: firstRule?.limit_period_time ?? null,
     points: firstRule?.points ?? 0,
     descriptions: { vi: '', en: '' },
   }
@@ -785,6 +813,11 @@ async function submitSetting() {
       check: settingForm.value.check || 'none',
       period: settingForm.value.period || null,
       cap: settingForm.value.cap != null && settingForm.value.cap !== '' ? Number(settingForm.value.cap) : null,
+      limit_period: settingForm.value.limit_period || null,
+      limit_period_time:
+        settingForm.value.limit_period_time != null && settingForm.value.limit_period_time !== ''
+          ? Number(settingForm.value.limit_period_time)
+          : null,
       descriptions: settingForm.value.descriptions,
     }
     await workpointApi.saveRule(payload)
@@ -1110,6 +1143,8 @@ watch(() => settingForm.value.case_key, (key) => {
     settingForm.value.check = rule.check ?? 'none'
     settingForm.value.period = rule.period ?? ''
     settingForm.value.cap = rule.cap ?? null
+    settingForm.value.limit_period = rule.limit_period ?? ''
+    settingForm.value.limit_period_time = rule.limit_period_time ?? null
     settingForm.value.points = rule.points ?? 0
   }
 }, { immediate: false })
@@ -2113,7 +2148,9 @@ watch([
 }
 
 .workpoint-top-users--dark .workpoint-top-users__rule-period,
-.workpoint-top-users--dark .workpoint-top-users__rule-cap {
+.workpoint-top-users--dark .workpoint-top-users__rule-cap,
+.workpoint-top-users--dark .workpoint-top-users__rule-limit-period,
+.workpoint-top-users--dark .workpoint-top-users__rule-limit-times {
   color: rgba(138, 43, 226, 0.9);
 }
 

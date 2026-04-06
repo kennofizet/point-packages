@@ -89,12 +89,15 @@ trait HasWorkpointRecords
             if ($caseConfig === null) {
                 continue;
             }
-            $caseConfig['user_id'] = $userId;
+            $caseConfig['user_id'] = $resolvedUserId;
 
             $checkName = $caseConfig['check'] ?? 'none';
             $rule = $service->resolveRule($checkName);
 
             if ($rule === null || !$rule->allowed($user, $target, $actionKey, [], $caseConfig, $zoneId)) {
+                continue;
+            }
+            if (!$service->isWithinLimitPeriod($resolvedUserId, $actionKey, $zoneId, $caseConfig)) {
                 continue;
             }
             $allowedZoneIds[] = $zoneId;
