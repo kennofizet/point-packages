@@ -48,6 +48,11 @@ trait HasWorkpointRecords
             ->where('user_id', $resolvedUserId)
             ->where('action_key', $actionKey);
 
+        $seasonId = BaseModelActions::currentUserSeasonId();
+        if ($seasonId !== null) {
+            $query->where('season_id', $seasonId);
+        }
+
         if ($target === null) {
             $query->whereNull('target_type')->whereNull('target_id');
         } else {

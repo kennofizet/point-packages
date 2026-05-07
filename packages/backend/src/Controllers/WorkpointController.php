@@ -2,6 +2,7 @@
 
 namespace Kennofizet\Workpoint\Controllers;
 
+use Kennofizet\PackagesCore\Services\SeasonService;
 use Kennofizet\Workpoint\Support\PeriodHelper;
 use Kennofizet\Workpoint\WorkpointRecordService;
 use Illuminate\Http\JsonResponse;
@@ -103,6 +104,82 @@ class WorkpointController extends Controller
         $this->workpointService->resetZoneRulesToDefault();
 
         return $this->apiResponseWithContext(['reset' => true]);
+    }
+
+    public function seasons(Request $request): JsonResponse
+    {
+        if (!class_exists(SeasonService::class)) {
+            return $this->apiResponseWithContext([
+                'seasons' => [],
+            ]);
+        }
+
+        $service = app(SeasonService::class);
+        $seasons = $this->workpointService->attachSeasonRates($service->listByCurrentZone());
+
+        return $this->apiResponseWithContext([
+            'seasons' => $seasons,
+        ]);
+    }
+
+    public function createSeason(Request $request): JsonResponse
+    {
+        if (!class_exists(SeasonService::class)) {
+            return $this->apiErrorResponse('Season service is unavailable', 501);
+        }
+
+        $name = trim((string) $request->input('name', ''));
+        if ($name === '') {
+            return $this->apiErrorResponse('name is required', 422);
+        }
+        $rateConvert = (float) $request->input('rate_convert', 1);
+        if (!is_numeric($request->input('rate_convert', 1)) || $rateConvert <= 0) {
+            return $this->apiErrorResponse('rate_convert must be a positive number', 422);
+        }
+
+        try {
+            $season = app(SeasonService::class)->createForCurrentZone(
+                $name,
+                $request->input('starts_at'),
+                $request->input('ends_at')
+            );
+            $this->workpointService->saveSeasonRateConvert((int) $season->id, $rateConvert);
+        } catch (\Throwable $e) {
+            return $this->apiErrorResponse($e->getMessage(), 422);
+        }
+
+        return $this->apiResponseWithContext([
+            'season' => [
+                'id' => (int) $season->id,
+                'name' => (string) $season->name,
+                'is_active' => (bool) $season->is_active,
+                'starts_at' => $season->starts_at?->toIso8601String(),
+                'ends_at' => $season->ends_at?->toIso8601String(),
+                'rate_convert' => $rateConvert,
+            ],
+        ], 201);
+    }
+
+    public function activateSeason(Request $request, int $seasonId): JsonResponse
+    {
+        if (!class_exists(SeasonService::class)) {
+            return $this->apiErrorResponse('Season service is unavailable', 501);
+        }
+
+        try {
+            $season = app(SeasonService::class)->activateForCurrentZone($seasonId);
+        } catch (\Throwable $e) {
+            return $this->apiErrorResponse($e->getMessage(), 422);
+        }
+
+        return $this->apiResponseWithContext([
+            'season' => [
+                'id' => (int) $season->id,
+                'name' => (string) $season->name,
+                'is_active' => (bool) $season->is_active,
+                'rate_convert' => $this->workpointService->getSeasonRateConvert((int) $season->id),
+            ],
+        ]);
     }
 
     private function parseLanguage(Request $request): string

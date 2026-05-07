@@ -15,6 +15,7 @@ class WorkpointPeriodTotal extends BaseModel
 
     protected $fillable = [
         'zone_id',
+        'season_id',
         'user_id',
         'subject_type',
         'subject_id',
@@ -32,6 +33,7 @@ class WorkpointPeriodTotal extends BaseModel
     ];
 
     protected $casts = [
+        'season_id' => 'integer',
         'user_id' => 'integer',
         'total_points' => 'integer',
     ];

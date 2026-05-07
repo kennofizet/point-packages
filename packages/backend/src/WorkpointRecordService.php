@@ -7,6 +7,7 @@ use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
 use Kennofizet\Workpoint\Events\WorkpointRecorded;
 use Kennofizet\Workpoint\Models\WorkpointPeriodTotal;
 use Kennofizet\Workpoint\Models\WorkpointRecord;
+use Kennofizet\Workpoint\Models\WorkpointSeasonRate;
 use Kennofizet\Workpoint\Models\WorkpointZoneCase;
 use Kennofizet\Workpoint\Services\PeriodTotalsSync;
 use Kennofizet\Workpoint\Support\PeriodHelper;
@@ -14,6 +15,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
+use Kennofizet\PackagesCore\Services\SeasonService;
 use Kennofizet\PackagesCore\Models\User;
 
 class WorkpointRecordService
@@ -89,9 +91,11 @@ class WorkpointRecordService
         }
 
         $pointsDelta = (int) ($caseConfig['points'] ?? 0);
+        $seasonId = $this->resolveSeasonIdForZone($zoneId);
 
         $record = WorkpointRecord::query()->create([
             'user_id' => $userId,
+            'season_id' => $seasonId,
             'subject_type' => $userEntity::class,
             'subject_id' => $userEntity->getKey(),
             'target_type' => $target ? $target::class : null,
@@ -108,6 +112,10 @@ class WorkpointRecordService
                 ->update(['zone_id' => $zoneId]);
             $record = WorkpointRecord::withoutGlobalScopes()->find($record->getKey()) ?? $record;
         }
+
+        $rateConvert = $this->getSeasonRateConvert($record->season_id, $zoneId);
+        $record->setAttribute('rate_convert', $rateConvert);
+        $record->setAttribute('converted_output', (float) $record->points_delta * $rateConvert);
 
         $record->load(['subject', 'target']);
 
@@ -192,11 +200,12 @@ class WorkpointRecordService
         }
 
         $namesByKey = [];
+        $nameCol = config('packages-core.user_col_name', 'name');
         try {
             $user = new User;
             $keyName = $user->getKeyName();
-            foreach (User::query()->whereIn($keyName, $ids)->get([$keyName, 'name']) as $model) {
-                $namesByKey[(string) $model->getKey()] = $model->name;
+            foreach (User::query()->whereIn($keyName, $ids)->get([$keyName, $nameCol]) as $model) {
+                $namesByKey[(string) $model->getKey()] = $model->getAttribute($nameCol);
             }
         } catch (\Throwable) {
             return $items;
@@ -261,8 +270,10 @@ class WorkpointRecordService
         $start = PeriodHelper::start($limitPeriod);
 
         if ($zoneId !== null) {
+            $seasonId = $this->resolveSeasonIdForZone($zoneId);
             $count = WorkpointRecord::withoutGlobalScopes()
                 ->where('zone_id', $zoneId)
+                ->when($seasonId !== null, static fn ($q) => $q->where('season_id', $seasonId))
                 ->where('user_id', $userId)
                 ->where('action_key', $actionKey)
                 ->where('created_at', '>=', $start)
@@ -763,5 +774,86 @@ class WorkpointRecordService
         $history = $this->getHistoryForUser($userId, $historyPeriod, $historyCursorId, $caseNameByKey);
 
         return array_merge(['period' => $historyPeriod], $history);
+    }
+
+    /**
+     * Attach season rate-convert value to each season item.
+     *
+     * @param  array<int, array<string, mixed>>  $seasons
+     * @return array<int, array<string, mixed>>
+     */
+    public function attachSeasonRates(array $seasons): array
+    {
+        $zoneId = BaseModelActions::currentUserZoneId();
+        $seasonIds = collect($seasons)->pluck('id')->filter()->map(static fn ($v) => (int) $v)->values()->all();
+        if ($seasonIds === []) {
+            return $seasons;
+        }
+
+        $rates = WorkpointSeasonRate::withoutGlobalScopes()->newQuery()
+            ->when(
+                $zoneId !== null,
+                static fn ($q) => $q->where('zone_id', $zoneId),
+                static fn ($q) => $q->whereNull('zone_id')
+            )
+            ->whereIn('season_id', $seasonIds)
+            ->pluck('rate_convert', 'season_id')
+            ->map(static fn ($v) => (float) $v)
+            ->all();
+
+        return array_map(static function (array $season) use ($rates) {
+            $sid = isset($season['id']) ? (int) $season['id'] : null;
+            $season['rate_convert'] = ($sid !== null && isset($rates[$sid])) ? (float) $rates[$sid] : 1.0;
+            return $season;
+        }, $seasons);
+    }
+
+    public function saveSeasonRateConvert(int $seasonId, float $rateConvert): void
+    {
+        $zoneId = BaseModelActions::currentUserZoneId();
+        WorkpointSeasonRate::withoutGlobalScopes()->newQuery()->updateOrCreate(
+            ['zone_id' => $zoneId, 'season_id' => $seasonId],
+            ['rate_convert' => $rateConvert]
+        );
+    }
+
+    public function getSeasonRateConvert(?int $seasonId, ?int $zoneId = null): float
+    {
+        if ($seasonId === null || $seasonId <= 0) {
+            return 1.0;
+        }
+
+        $zoneId = $zoneId ?? BaseModelActions::currentUserZoneId();
+        $rate = WorkpointSeasonRate::withoutGlobalScopes()->newQuery()
+            ->when(
+                $zoneId !== null,
+                static fn ($q) => $q->where('zone_id', $zoneId),
+                static fn ($q) => $q->whereNull('zone_id')
+            )
+            ->where('season_id', $seasonId)
+            ->value('rate_convert');
+
+        return $rate !== null ? (float) $rate : 1.0;
+    }
+
+    private function resolveSeasonIdForZone(?int $zoneId): ?int
+    {
+        $currentSeasonId = BaseModelActions::currentUserSeasonId();
+        if ($zoneId === null || $zoneId <= 0) {
+            return (int) $currentSeasonId;
+        }
+
+        if (class_exists(SeasonService::class)) {
+            try {
+                $seasonId = app(SeasonService::class)->getActiveSeasonIdForZone($zoneId);
+                if ($seasonId !== null) {
+                    return (int) $seasonId;
+                }
+            } catch (\Throwable) {
+                // Fallback to request season context when active season lookup fails.
+            }
+        }
+
+        return (int) $currentSeasonId;
     }
 }

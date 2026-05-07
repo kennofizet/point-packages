@@ -40,6 +40,10 @@ User display column comes from `packages-core` config:
 - `packages-core.user_col_name` (default: `name`)
 - `packages-core.table_user` (user table used by core)
 
+Season context also comes from `packages-core`:
+- Active season in current zone is used by default.
+- `workpoint_records` + `workpoint_period_totals` are season-scoped via `season_id`.
+
 ---
 
 ## Config
@@ -128,15 +132,22 @@ All under `{packages-core.api_prefix}/{workpoint.api_prefix}/` (e.g. `api/knf/wo
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `top?period=day\|week\|month\|year&limit=10` | Top users by points in period (zone-scoped). |
+| GET | `top?period=day\|week\|month\|year&limit=10` | Top users by points in period (zone + season scoped). |
 | GET | `rules?language=vi\|en` | Merged rules (default + zone overrides). Returns `rules`, `language`, `isManager`. |
 | POST | `rules/save` | Save one zone case override (manager). Zone from `X-Knf-Zone-Id`. Body: `case_key`, `points`, `check`, `period?`, `cap?`, `descriptions?`. |
 | POST | `rules/reset` | Reset zone rules to default for the current zone (manager). Zone from `X-Knf-Zone-Id`; no body required. |
-| GET | `history/me?period=day\|week\|month\|year&cursor=&language=vi\|en` | Current user: point log in period (cursor = last record `id` for “load more”), totals, ranks, `today_by_rule`, `isManager`. |
-| GET | `history/user/{userId}?period=&cursor=&language=` | Same payload for one user (self always; others only if manager for zone / server). |
+| GET | `history/me/summary?language=vi\|en` | Current user summary: totals, ranks, `today_by_rule`, `isManager`. |
+| GET | `history/me/logs?period=day\|week\|month\|year&cursor=&language=vi\|en` | Current user logs only (cursor pagination). |
+| GET | `history/user/{userId}/summary?language=` | Summary for one user (manager). |
+| GET | `history/user/{userId}/logs?period=&cursor=&language=` | Logs for one user (manager). |
 | GET | `admin/members?cursor=` | **Manager only.** Cursor-paginated users who have workpoints in the zone (`next_cursor` is base64 JSON). |
+| GET | `seasons` | **Manager only.** Seasons list of current zone. |
+| POST | `seasons` | **Manager only.** Create a new season (`name`, optional `starts_at`, `ends_at`) and make it active. |
+| POST | `seasons/{seasonId}/activate` | **Manager only.** Set existing season as active for current zone. |
 
 History summary responses include **`today_by_rule`**: per rule, `earned` is points earned today; **`max_points`** is the max total points for that rule when the check is capped — for `count_cap_per_period` it is **`points × cap`** (cap = max awards per period); for `first_time` / `first_time_per_period` / `first_time_per_target` it is **`points`** (one award). If **`limit_period_time`** is set, an additional ceiling **`points × limit_period_time`** applies; when both a count rule and a limit apply, the smaller ceiling is shown. **`max_points`** is `null` when unlimited (`none` or no cap on count rules and no limit period cap).
+
+Backend always resolves season from active season of current zone.
 
 ---
 

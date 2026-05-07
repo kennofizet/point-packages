@@ -88,6 +88,9 @@
       <div class="workpoint-top-users__rule-header">
         <h2 class="workpoint-top-users__rule-title">{{ t.ruleTitle }}</h2>
         <template v-if="isManager">
+          <button type="button" class="workpoint-top-users__rule-btn workpoint-top-users__rule-btn--season" @click="openSeasonPopup">
+            {{ t.seasonBtn }}
+          </button>
           <button type="button" class="workpoint-top-users__rule-btn workpoint-top-users__rule-btn--setting" @click="openSettingPopup">
             {{ t.settingBtn }}
           </button>
@@ -185,6 +188,66 @@
             <template v-else>
               <button type="button" class="workpoint-top-users__rule-btn workpoint-top-users__rule-btn--primary" @click="submitSetting" :disabled="savingRule">{{ t.save }}</button>
             </template>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="seasonPopupOpen" class="workpoint-top-users__popup-overlay" @click.self="closeSeasonPopup">
+        <div class="workpoint-top-users__popup">
+          <div class="workpoint-top-users__popup-header">
+            <h3 class="workpoint-top-users__popup-title">{{ t.seasonPopupTitle }}</h3>
+            <button type="button" class="workpoint-top-users__popup-close" @click="closeSeasonPopup" aria-label="Close">&times;</button>
+          </div>
+          <div class="workpoint-top-users__popup-body">
+            <div class="workpoint-top-users__season-create-card">
+              <div class="workpoint-top-users__season-create-fields">
+                <label class="workpoint-top-users__popup-step">
+                  <span class="workpoint-top-users__popup-label">{{ t.seasonNameLabel }}</span>
+                  <input
+                    v-model="seasonCreateForm.name"
+                    class="workpoint-top-users__popup-input"
+                    type="text"
+                    :placeholder="t.seasonNamePlaceholder"
+                  />
+                </label>
+                <label class="workpoint-top-users__popup-step">
+                  <span class="workpoint-top-users__popup-label">{{ t.rateConvertLabel }}</span>
+                  <input
+                    v-model.number="seasonCreateForm.rate_convert"
+                    class="workpoint-top-users__popup-input"
+                    type="number"
+                    min="0.000001"
+                    step="0.000001"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                class="workpoint-top-users__rule-btn workpoint-top-users__rule-btn--primary"
+                :disabled="creatingSeason"
+                @click="createSeason"
+              >
+                {{ creatingSeason ? t.loading : t.newSeasonBtn }}
+              </button>
+            </div>
+            <div v-if="seasons.length" class="workpoint-top-users__season-grid">
+              <article v-for="s in seasons" :key="'season-card-' + s.id" class="workpoint-top-users__season-card">
+                <div class="workpoint-top-users__season-card-head">
+                  <h4 class="workpoint-top-users__season-card-title">{{ s.name || ('#' + s.id) }}</h4>
+                  <span v-if="s.is_active" class="workpoint-top-users__season-badge">{{ t.activeSeasonBadge }}</span>
+                </div>
+                <p class="workpoint-top-users__season-rate">{{ t.rateConvertLabel }}: {{ Number(s.rate_convert ?? 1).toFixed(3) }}</p>
+                <button
+                  type="button"
+                  class="workpoint-top-users__rule-btn"
+                  :disabled="s.is_active || seasonActivatingId === s.id"
+                  @click="activateSeasonCard(s.id)"
+                >
+                  {{ seasonActivatingId === s.id ? t.loading : t.activateSeasonBtn }}
+                </button>
+              </article>
+            </div>
+            <p v-else class="workpoint-top-users__empty">{{ t.noSeason }}</p>
           </div>
         </div>
       </div>
@@ -415,6 +478,16 @@ const periods = PERIOD_KEYS.map(value => ({ value }))
 const TRANSLATIONS = {
   vi: {
     zone: 'Khu vực',
+    season: 'Mùa',
+    newSeasonBtn: 'Mùa mới',
+    seasonBtn: 'Mùa giải',
+    seasonPopupTitle: 'Mùa giải',
+    activateSeasonBtn: 'Kích hoạt',
+    activeSeasonBadge: 'Đang hoạt động',
+    noSeason: 'Chưa có mùa giải.',
+    seasonNameLabel: 'Tên mùa giải',
+    rateConvertLabel: 'Tỷ lệ quy đổi',
+    seasonNamePlaceholder: 'Nhập tên mùa giải',
     zoneName: (id) => `Khu vực ${id}`,
     day: 'Ngày',
     week: 'Tuần',
@@ -461,6 +534,16 @@ const TRANSLATIONS = {
   },
   en: {
     zone: 'Zone',
+    season: 'Season',
+    newSeasonBtn: 'New season',
+    seasonBtn: 'Seasons',
+    seasonPopupTitle: 'Seasons',
+    activateSeasonBtn: 'Activate',
+    activeSeasonBadge: 'Active',
+    noSeason: 'No season yet.',
+    seasonNameLabel: 'Season name',
+    rateConvertLabel: 'Rate convert',
+    seasonNamePlaceholder: 'Enter season name',
     zoneName: (id) => `Zone ${id}`,
     day: 'Day',
     week: 'Week',
@@ -517,11 +600,27 @@ function parseZonesFromResponse(resp) {
   return []
 }
 
+function parseSeasonsFromResponse(resp) {
+  if (!resp || !resp.data) return { seasons: [] }
+  const d = resp.data
+  const payload = d?.datas ?? d?.data ?? d
+  const list = Array.isArray(payload?.seasons) ? payload.seasons : (Array.isArray(payload) ? payload : [])
+  return { seasons: list }
+}
+
 const workpointApi = inject('workpointApi', null)
 
 const zones = ref([])
 const zonesLoading = ref(true)
 const selectedZoneId = ref(null)
+const seasons = ref([])
+const creatingSeason = ref(false)
+const seasonPopupOpen = ref(false)
+const seasonActivatingId = ref(null)
+const seasonCreateForm = ref({
+  name: '',
+  rate_convert: 1,
+})
 const period = ref(
   PERIOD_KEYS.includes(props.initialPeriod) ? props.initialPeriod : 'week'
 )
@@ -585,6 +684,16 @@ const t = computed(() => {
   const lang = TRANSLATIONS[effectiveLanguage.value] || TRANSLATIONS.vi
   return {
     zone: lang.zone,
+    season: lang.season,
+    newSeasonBtn: lang.newSeasonBtn,
+    seasonBtn: lang.seasonBtn,
+    seasonPopupTitle: lang.seasonPopupTitle,
+    activateSeasonBtn: lang.activateSeasonBtn,
+    activeSeasonBadge: lang.activeSeasonBadge,
+    noSeason: lang.noSeason,
+    seasonNameLabel: lang.seasonNameLabel,
+    seasonNamePlaceholder: lang.seasonNamePlaceholder,
+    rateConvertLabel: lang.rateConvertLabel,
     zoneName: typeof lang.zoneName === 'function' ? lang.zoneName : (id) => `Zone ${id}`,
     period: (key) => lang[key] ?? key,
     loadingZones: lang.loadingZones,
@@ -710,7 +819,21 @@ async function fetchZones() {
   }
 }
 
-function onZoneChange() {
+async function fetchSeasons() {
+  if (!workpointApi || typeof workpointApi.getSeasons !== 'function' || !hasZoneContext.value || !isManager.value) {
+    seasons.value = []
+    return
+  }
+  try {
+    const res = await workpointApi.getSeasons()
+    const parsed = parseSeasonsFromResponse(res)
+    seasons.value = parsed.seasons
+  } catch (_) {
+    seasons.value = []
+  }
+}
+
+async function onZoneChange() {
   const z = zones.value.find(zone => zone.id === selectedZoneId.value)
   if (z) {
     try {
@@ -724,6 +847,53 @@ function onZoneChange() {
     loadHistoryEntry()
   } else {
     fetchTop()
+  }
+}
+
+async function createSeason() {
+  if (!workpointApi || typeof workpointApi.createSeason !== 'function') return
+  const name = String(seasonCreateForm.value.name || '').trim()
+  const rateConvert = Number(seasonCreateForm.value.rate_convert)
+  if (!name) return
+  if (!Number.isFinite(rateConvert) || rateConvert <= 0) return
+  creatingSeason.value = true
+  try {
+    await workpointApi.createSeason({ name, rate_convert: rateConvert })
+    seasonCreateForm.value = { name: '', rate_convert: 1 }
+    await fetchSeasons()
+    if (viewMode.value === 'rules') fetchRules()
+    else if (viewMode.value === 'history') loadHistoryEntry()
+    else fetchTop()
+  } catch (e) {
+    console.warn('Create season failed', e)
+  } finally {
+    creatingSeason.value = false
+  }
+}
+
+async function openSeasonPopup() {
+  await fetchSeasons()
+  seasonPopupOpen.value = true
+}
+
+function closeSeasonPopup() {
+  seasonPopupOpen.value = false
+  seasonCreateForm.value = { name: '', rate_convert: 1 }
+}
+
+async function activateSeasonCard(seasonId) {
+  if (!workpointApi || typeof workpointApi.activateSeason !== 'function') return
+  seasonActivatingId.value = seasonId
+  try {
+    await workpointApi.activateSeason(seasonId)
+    await fetchSeasons()
+    if (viewMode.value === 'rules') fetchRules()
+    else if (viewMode.value === 'history') loadHistoryEntry()
+    else fetchTop()
+  } catch (e) {
+    console.warn('Activate season failed', e)
+  } finally {
+    seasonActivatingId.value = null
   }
 }
 
@@ -1187,6 +1357,14 @@ watch([
   margin-bottom: 16px;
 }
 
+.workpoint-top-users__season-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
 .workpoint-top-users__zone-label {
   font-weight: 600;
   font-size: 13px;
@@ -1306,9 +1484,13 @@ watch([
   margin: 24px 0;
 }
 
-.workpoint-top-users__rule-btn--setting,
-.workpoint-top-users__rule-btn--reset {
+.workpoint-top-users__rule-btn--season,
+.workpoint-top-users__rule-btn--setting {
   margin-left: auto;
+}
+
+.workpoint-top-users__rule-btn--reset {
+  margin-left: 0;
 }
 
 .workpoint-top-users__rule-btn--primary {
@@ -1467,6 +1649,68 @@ watch([
   border-top: 1px solid #e5e7eb;
 }
 
+.workpoint-top-users__season-create-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+}
+
+.workpoint-top-users__season-create-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.workpoint-top-users__season-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.workpoint-top-users__season-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workpoint-top-users__season-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workpoint-top-users__season-card-title {
+  margin: 0;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.workpoint-top-users__season-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #6ee7b7;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.workpoint-top-users__season-rate {
+  margin: 0;
+  font-size: 12px;
+  color: #4b5563;
+}
+
 /* Popup light mode: ensure select/input background for options */
 .workpoint-top-users__popup-select,
 .workpoint-top-users__popup-input {
@@ -1601,6 +1845,30 @@ watch([
 .workpoint-top-users--dark .workpoint-top-users__popup-footer .workpoint-top-users__rule-btn--primary:hover:not(:disabled) {
   background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
   box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__season-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__season-create-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.workpoint-top-users--dark .workpoint-top-users__season-card-title {
+  color: #e6eef6;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__season-rate {
+  color: #b8c4d1;
+}
+
+.workpoint-top-users--dark .workpoint-top-users__season-badge {
+  color: #ecfeff;
+  background: rgba(16, 185, 129, 0.28);
+  border-color: rgba(16, 185, 129, 0.55);
 }
 
 .workpoint-top-users__rule-list {

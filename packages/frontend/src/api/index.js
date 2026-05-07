@@ -81,5 +81,11 @@ export function createWorkpointApi(coreUrl, workpointUrl, token) {
       workpointApi.get('/admin/members', {
         params: cursor != null && cursor !== '' ? { cursor } : {},
       }),
+    /** Seasons in current zone. */
+    getSeasons: () => workpointApi.get('/seasons'),
+    /** Create a new season (manager). Body: name, rate_convert, starts_at?, ends_at? */
+    createSeason: (payload) => workpointApi.post('/seasons', payload),
+    /** Activate existing season in current zone (manager). */
+    activateSeason: (seasonId) => workpointApi.post(`/seasons/${seasonId}/activate`, {}),
   }
 }

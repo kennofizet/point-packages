@@ -2,6 +2,7 @@
 
 namespace Kennofizet\Workpoint\Rules;
 
+use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
 use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
 use Kennofizet\Workpoint\Models\WorkpointRecord;
 use Kennofizet\Workpoint\Support\PeriodHelper;
@@ -30,8 +31,10 @@ class FirstTimePerPeriod implements CheckRuleInterface
             ->where('created_at', '>=', $start);
 
         if ($zoneId !== null) {
+            $seasonId = BaseModelActions::currentUserSeasonId();
             $query = WorkpointRecord::withoutGlobalScopes()
                 ->where('zone_id', $zoneId)
+                ->when($seasonId !== null, static fn ($q) => $q->where('season_id', $seasonId))
                 ->where('user_id', $userId)
                 ->where('action_key', $actionKey)
                 ->where('created_at', '>=', $start);

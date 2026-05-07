@@ -29,4 +29,14 @@ class WorkpointRecorded
     {
         return $this->record->points_delta;
     }
+
+    public function getRateConvert(): float
+    {
+        return (float) ($this->record->getAttribute('rate_convert') ?? 1);
+    }
+
+    public function getConvertedOutput(): float
+    {
+        return (float) ($this->record->getAttribute('converted_output') ?? ($this->record->points_delta * $this->getRateConvert()));
+    }
 }

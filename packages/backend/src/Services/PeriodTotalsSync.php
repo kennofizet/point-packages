@@ -30,6 +30,7 @@ class PeriodTotalsSync
             // Match row by the record's zone (explicit + no global scope: safe in queue / multi-zone).
             $row = WorkpointPeriodTotal::withoutGlobalScopes()
                 ->where('zone_id', $record->zone_id)
+                ->where('season_id', $record->season_id)
                 ->where('user_id', $userId)
                 ->where('period_type', $periodType)
                 ->where('period_key', $periodKey)
@@ -39,6 +40,7 @@ class PeriodTotalsSync
             } else {
                 WorkpointPeriodTotal::withoutGlobalScopes()->create([
                     'zone_id' => $record->zone_id,
+                    'season_id' => $record->season_id,
                     'user_id' => $userId,
                     'subject_type' => $entityType,
                     'subject_id' => $entityId,

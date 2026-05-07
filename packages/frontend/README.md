@@ -76,7 +76,7 @@ Leaderboard + rules view. Fetches zones from core; top and rules from workpoint 
 
 **Slots:** `subject` — custom content for each row (receives `item`, `rank`).
 
-**Behaviour:** Zone selector (if multiple zones); period tabs; **“History”** opens point log + totals + ranks + today-by-rule; **“Rules”** toggles to rules view. Managers see a split layout: user list (load more) → detail for selected user. Needs `workpointApi` injected (or provided by plugin).
+**Behaviour:** Zone selector (if multiple zones), period tabs; **“History”** opens point log + totals + ranks + today-by-rule; **“Rules”** toggles to rules view. Managers see a split layout: user list (load more) → detail for selected user and can manage seasons from rules view popup. Needs `workpointApi` injected (or provided by plugin).
 
 ---
 
@@ -107,6 +107,9 @@ Inline notification when user earns points (e.g. “+2 workpoints”). Optional 
 - `getRules(language)` — GET rules (workpoint; zone from header).
 - `saveRule(payload)` — POST save zone rule (manager). Zone from `X-Knf-Zone-Id` (same header as other workpoint calls).
 - `resetZoneRules()` — POST reset zone rules for the current zone (manager).
+- `getSeasons()` — GET seasons for current zone.
+- `createSeason(payload)` — POST create new season (manager).
+- `activateSeason(seasonId)` — POST set active season (manager).
 
 Requests send `X-Knf-Token`; workpoint requests send `X-Knf-Zone-Id` from `localStorage.selected_zone` when set.
 

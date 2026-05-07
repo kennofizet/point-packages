@@ -23,5 +23,8 @@ Route::prefix($prefix . '/' . $workpointPrefix)
             Route::post('rules/save', [WorkpointController::class, 'saveRule']);
             Route::post('rules/reset', [WorkpointController::class, 'resetZoneRules']);
             Route::get('admin/members', [WorkpointController::class, 'adminMembers']);
+            Route::get('seasons', [WorkpointController::class, 'seasons']);
+            Route::post('seasons', [WorkpointController::class, 'createSeason']);
+            Route::post('seasons/{seasonId}/activate', [WorkpointController::class, 'activateSeason']);
         });
     });

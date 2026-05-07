@@ -13,6 +13,7 @@ class WorkpointRecord extends BaseModel
 
     protected $fillable = [
         'zone_id',
+        'season_id',
         'user_id',
         'subject_type',
         'subject_id',
@@ -34,6 +35,7 @@ class WorkpointRecord extends BaseModel
     ];
 
     protected $casts = [
+        'season_id' => 'integer',
         'user_id' => 'integer',
         'payload' => 'array',
     ];

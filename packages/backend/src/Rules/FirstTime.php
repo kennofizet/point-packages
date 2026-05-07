@@ -2,6 +2,7 @@
 
 namespace Kennofizet\Workpoint\Rules;
 
+use Kennofizet\PackagesCore\Core\Model\BaseModelActions;
 use Kennofizet\Workpoint\Contracts\CheckRuleInterface;
 use Kennofizet\Workpoint\Models\WorkpointRecord;
 
@@ -25,8 +26,10 @@ class FirstTime implements CheckRuleInterface
             ->where('action_key', $actionKey);
 
         if ($zoneId !== null) {
+            $seasonId = BaseModelActions::currentUserSeasonId();
             $query = WorkpointRecord::withoutGlobalScopes()
                 ->where('zone_id', $zoneId)
+                ->when($seasonId !== null, static fn ($q) => $q->where('season_id', $seasonId))
                 ->where('user_id', $userId)
                 ->where('action_key', $actionKey);
         }

@@ -4,6 +4,7 @@ return [
     'table' => env('WORKPOINT_TABLE', 'workpoint_records'),
     'period_totals_table' => env('WORKPOINT_PERIOD_TOTALS_TABLE', 'workpoint_period_totals'),
     'zone_cases_table' => env('WORKPOINT_ZONE_CASES_TABLE', 'workpoint_zone_cases'),
+    'season_rates_table' => env('WORKPOINT_SEASON_RATES_TABLE', 'workpoint_season_rates'),
     'api_prefix' => env('WORKPOINT_API_PREFIX', 'workpoint'),
 
     /*
